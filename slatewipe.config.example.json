@@ -1,0 +1,54 @@
+{
+  "_comment": "slatewipe configuration. Everything here is a nuke-list, never a keep-list.",
+  "id": "local.slatewiper",
+  "_id_comment": "Reverse-DNS id for the app bundle, LaunchAgent labels and the Android app. Changing it after granting permissions means re-granting them.",
+  "quitApps": {
+    "_comment": "GUI apps to quit on --go (graceful quit; an app that refuses, e.g. unsaved docs, is reported as untouched). --hard force-kills anything still running after the grace period. Cursor's open folders are read from its storage.json after it quits and recorded with an `open -a Cursor` resume line.",
+    "list": [],
+    "graceSeconds": 8
+  },
+  "chrome": {
+    "_comment": "Optional work/personal split. Windows in personalProfiles (Chrome profile names) are personal; any other profile is work. If personalProfiles is empty, every window is personal unless a tab URL matches workUrlPatterns. Only matters for routing to two archive targets (e.g. two Roam graphs).",
+    "personalProfiles": [],
+    "workUrlPatterns": []
+  },
+  "terminals": {
+    "_comment": "cwd under personalDirs → personal; under workDirs → work; anywhere else (Documents etc.) → personal.",
+    "personalDirs": [],
+    "workDirs": []
+  },
+  "server": {
+    "_comment": "server.mjs (the phone button). The phone tries, in order: tunnel (https, Cloudflare Tunnel + Access service token), hosts (plain names, e.g. Tailscale MagicDNS or LAN hostname), Bonjour discovery on the LAN, the LAN IP baked in at build time.",
+    "port": 7337,
+    "hosts": [],
+    "tunnel": ""
+  },
+  "roam": {
+    "_comment": "Optional. Push each wipe to Roam's daily notes page. Set graph names here and tokens in mine/.env. Leave out a scope (or this whole section) to skip it.",
+    "personal": null,
+    "work": null
+  },
+  "finder": {
+    "_comment": "Record Finder window paths and close them on --go.",
+    "close": true
+  },
+  "sweep": {
+    "_comment": "Move loose files into the archive dir on --go. Hidden files are skipped. Needs Files-and-Folders permission for SlateWiper (macOS asks on first run).",
+    "desktop": {
+      "enabled": true
+    },
+    "downloads": {
+      "enabled": false,
+      "olderThanDays": 1
+    }
+  },
+  "afterwards": {
+    "_comment": "URLs to open in Chrome after a wipe (a 'begin again' page). Empty = open nothing.",
+    "openUrls": []
+  },
+  "autoSnapshot": {
+    "_comment": "slate-watcher (LaunchAgent) runs `--snapshot` on these events. Edit and the watcher picks it up without restart.",
+    "onPowerOff": true,
+    "onSleep": false
+  }
+}

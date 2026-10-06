@@ -1,0 +1,8 @@
+# your own settings, tokens and notes (make it its own private repo if you like)
+mine/
+.env
+# build products
+app/SlateWiper.app/
+watcher/slate-watcher
+android/build/
+.DS_Store

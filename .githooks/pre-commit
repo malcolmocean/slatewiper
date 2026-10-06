@@ -1,0 +1,15 @@
+#!/bin/bash
+# Refuses commits that would leak mine/ into the public repo: any value from mine/.env, or any
+# added line matching a pattern in mine/forbidden.txt (one extended regex per line; # comments).
+# Enable once per clone: git config core.hooksPath .githooks
+cd "$(git rev-parse --show-toplevel)"
+added=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++')
+bad=0
+check() { local hits; hits=$(grep -nE -- "$1" <<<"$added"); [ -n "$hits" ] && { echo "pre-commit: $2"; echo "$hits" | head -5; bad=1; }; }
+if [ -f mine/.env ]; then
+  while IFS='=' read -r k v; do v=${v//\"/}; [ ${#v} -ge 8 ] && check "$(printf '%s' "$v" | sed 's/[][\.*^$+?(){}|/]/\\&/g')" "value of $k from mine/.env"; done < <(grep -E '^[A-Z_]+=' mine/.env)
+fi
+if [ -f mine/forbidden.txt ]; then
+  while IFS= read -r pat; do [ -n "$pat" ] && [[ $pat != \#* ]] && check "$pat" "matches /$pat/ from mine/forbidden.txt"; done < mine/forbidden.txt
+fi
+[ $bad = 0 ] || { echo "(move it into mine/, or commit with --no-verify if it's really fine)"; exit 1; }
