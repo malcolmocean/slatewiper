@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SlateWiper</title>
+<meta name="description" content="One button that archives every open terminal session and browser tab somewhere findable, then closes them all. macOS, set up by your coding agent.">
+<link rel="canonical" href="https://creations.malcolmocean.com/slatewiper/">
+<meta property="og:title" content="SlateWiper: drop things without noticing you dropped them">
+<meta property="og:description" content="One button that archives every open terminal session and browser tab somewhere findable, then closes them all.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://creations.malcolmocean.com/slatewiper/">
+<meta property="og:image" content="https://creations.malcolmocean.com/slatewiper/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A hand wiping a chalkboard clean with an eraser, beside the words SlateWiper">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.png" sizes="32x32">
+<link rel="preload" href="/maven-pro-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+  font-family: "Maven Pro"; font-style: normal; font-weight: 400 900; font-display: swap;
+  src: url(/maven-pro-latin.woff2) format("woff2");
+}
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf8; --panel: #ffffff; --fg: #1c1a17; --muted: #6b6560; --faint: #96908a; --rule: #e6e1da;
+  --accent: #1d6b52; --accent-hi: #124a38; --accent-soft: #e2f0ea;
+  --code-bg: #f3f0ea; --hl: rgba(233, 196, 106, 0.38); --note: #c38d9e;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #14130f; --panel: #1c1a16; --fg: #efeae3; --muted: #a39c93; --faint: #756e67; --rule: #2e2b25;
+    --accent: #5fc9a4; --accent-hi: #9fe3cb; --accent-soft: #11291f; --code-bg: #201e19;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14130f; --panel: #1c1a16; --fg: #efeae3; --muted: #a39c93; --faint: #756e67; --rule: #2e2b25;
+  --accent: #5fc9a4; --accent-hi: #9fe3cb; --accent-soft: #11291f; --code-bg: #201e19;
+}
+* { box-sizing: border-box; }
+::selection { background: var(--accent); color: #fff; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 17px/1.6 "Maven Pro", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent-hi); text-decoration-thickness: 2px; }
+.wrap { max-width: 46rem; margin: 0 auto; padding: 0 16px; }
+header { padding: 56px 0 8px; }
+.crumb { font-size: 14px; color: var(--faint); margin: 0 0 28px; }
+.crumb a { color: var(--muted); }
+h1 { font-size: clamp(40px, 7vw, 60px); line-height: 1; letter-spacing: -0.02em; margin: 0 0 14px; font-weight: 800; }
+.tagline { font-size: 21px; line-height: 1.45; color: var(--muted); margin: 0 0 18px; max-width: 36rem; }
+.tagline mark { background: var(--hl); color: inherit; border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.story { max-width: 40rem; margin: 0 0 22px; }
+a.quiet { color: inherit; text-decoration: none; }
+a.quiet:hover { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 32px; padding: 0; list-style: none; font-size: 13px; }
+.badges li { border: 1px solid var(--rule); border-radius: 999px; padding: 2px 11px; color: var(--muted); background: var(--panel); }
+.badges li.hack { border-color: var(--accent); color: var(--accent); }
+figure.shot { margin: 0 auto 40px; max-width: 64rem; padding: 0 16px; }
+figure.shot img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--rule); box-shadow: 0 18px 50px -20px rgba(50, 35, 20, 0.45); }
+figure.shot figcaption { font-size: 14px; color: var(--faint); text-align: center; margin-top: 12px; }
+h2 { font-size: 26px; line-height: 1.2; margin: 56px 0 14px; letter-spacing: -0.01em; }
+h3 { font-size: 19px; margin: 32px 0 10px; }
+p, li { max-width: 40rem; }
+code, kbd, pre { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+kbd {
+  display: inline-block; min-width: 1.6em; text-align: center; line-height: 1.5;
+  background: var(--panel); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px;
+}
+kbd.pedal { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-hi); font-weight: 600; }
+pre {
+  background: var(--code-bg); border: 1px solid var(--rule); border-radius: 10px;
+  padding: 14px 16px; overflow-x: auto; line-height: 1.5; margin: 0;
+}
+pre code { background: none; padding: 0; font-size: 13.5px; }
+.codebox { position: relative; margin: 14px 0 20px; }
+.codebox .copy {
+  position: absolute; top: 8px; right: 8px; font: 600 12px/1 "Maven Pro", sans-serif;
+  padding: 7px 11px; border-radius: 7px; cursor: pointer;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--rule);
+}
+.codebox .copy:hover { border-color: var(--accent); color: var(--accent); }
+.codebox.tall pre { max-height: 26rem; }
+.table-scroll { overflow-x: auto; margin: 14px 0 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 600; }
+td:first-child { white-space: nowrap; }
+ol.steps { padding-left: 1.3em; }
+ol.steps > li { margin-bottom: 10px; padding-left: 4px; }
+ol.steps ul { padding-left: 1.2em; margin: 6px 0 0; }
+.callout {
+  border-left: 3px solid var(--note); background: var(--panel); border-radius: 0 10px 10px 0;
+  padding: 12px 16px; margin: 18px 0; max-width: 40rem;
+}
+.callout p { margin: 0; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 14px 0; font-size: 15px; color: var(--muted); }
+.flow .arrow { color: var(--faint); }
+.dim { color: var(--muted); }
+footer { border-top: 1px solid var(--rule); margin-top: 72px; padding: 22px 0 48px; font-size: 14px; color: var(--muted); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+
+/* ---------- the pedal ---------- */
+:root { --base: #3a3733; --key: #1e1d1b; --key-edge: rgba(0,0,0,.25); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --base: #4a4640; --key: #24221f; --key-edge: rgba(255,255,255,.08); } }
+:root[data-theme="dark"] { --base: #4a4640; --key: #24221f; --key-edge: rgba(255,255,255,.08); }
+.pd { display: block; width: 100%; height: auto; overflow: visible; }
+.pd .base { fill: var(--base); }
+.pd .k { color: var(--key); }
+.pd .k use { stroke: var(--key-edge); stroke-width: 1.5; }
+.pd .k text { fill: #d8d2c8; font: 700 26px "Maven Pro", sans-serif; text-anchor: middle; opacity: .55; }
+.pd .k.tap { color: var(--accent); }
+.pd .k.hold { color: var(--accent-hi); }
+.pd .k.hold use { stroke: var(--accent); stroke-width: 5; stroke-dasharray: 9 6; }
+.pd .k.tap text, .pd .k.hold text { fill: #fff; opacity: 1; }
+.hero-pedal { max-width: 34rem; margin: 22px auto 26px; }
+.hero-pedal .roles { list-style: none; padding: 0; margin: 4px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; font-size: 15px; color: var(--muted); gap: 8px; }
+.hero-pedal .roles b { display: block; font-size: 24px; color: var(--accent); line-height: 1.2; }
+.gestures { list-style: none; padding: 0; margin: 14px 0 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: 10px; max-width: none; }
+.gestures li { display: flex; gap: 14px; align-items: center; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 14px 10px 10px; max-width: none; }
+.gestures .pd { width: 104px; flex: none; }
+.gestures p { margin: 0; }
+.gestures .how { font-weight: 700; }
+.gestures .what { color: var(--muted); font-size: 15px; line-height: 1.45; }
+.flow { list-style: none; padding: 0; margin: 14px 0 18px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: none; }
+.flow li { text-align: center; font-size: 14px; color: var(--muted); max-width: none; position: relative; }
+.flow .n { display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background: var(--rule); color: var(--fg); font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.flow .pd { width: 100%; max-width: 110px; margin: 0 auto 4px; }
+.flow p { margin: 0; line-height: 1.35; }
+.flow b { color: var(--accent); }
+@media (max-width: 640px) { .flow { grid-template-columns: repeat(3, 1fr); row-gap: 18px; } }
+
+/* ---------- diagram ---------- */
+.diagram { display: grid; grid-template-columns: 1fr 76px 1fr 76px 1fr 76px 1fr 44px 1fr; align-items: center; margin: 20px -8px 12px; position: relative; }
+@media (min-width: 900px) { .diagram { margin-left: -9rem; margin-right: -9rem; } }
+.diagram .node { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.35; text-align: center; min-height: 92px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.diagram .node b { font-size: 14.5px; }
+.diagram .node span { color: var(--muted); }
+.diagram .node.accent { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.diagram .node.file b { font-family: var(--mono); font-size: 12.5px; }
+.diagram .pd.mini { width: 70px; margin: 0 auto 2px; }
+.diagram .arrow { position: relative; height: 92px; }
+.diagram .arrow::before { content: ""; position: absolute; left: 6px; right: 10px; top: 50%; border-top: 2px solid var(--faint); }
+.diagram .arrow::after { content: ""; position: absolute; right: 4px; top: calc(50% - 6px); border: 6px solid transparent; border-left: 8px solid var(--faint); border-right: 0; }
+.diagram .arrow span { position: absolute; left: 0; right: 0; bottom: calc(50% + 6px); text-align: center; font-size: 11px; line-height: 1.2; color: var(--faint); font-family: var(--mono); }
+.diagram .branch { grid-column: 3 / 6; grid-row: 2; grid-row-start: 2; padding-top: 30px; position: relative; display: flex; justify-content: center; }
+.diagram .branch::before, .diagram .branch::after { content: ""; position: absolute; top: 0; height: 30px; border-left: 2px dashed var(--faint); }
+.diagram .branch::before { left: 16%; }
+.diagram .branch::after { right: 16%; }
+.diagram .node.side { border-style: dashed; max-width: 17rem; min-height: 0; }
+@media (max-width: 760px) {
+  .diagram { grid-template-columns: 1fr; margin: 20px 0 12px; max-width: 22rem; }
+  .diagram .arrow { height: 44px; }
+  .diagram .arrow::before { left: 50%; right: auto; top: 4px; bottom: 10px; border-top: 0; border-left: 2px solid var(--faint); }
+  .diagram .arrow::after { left: calc(50% - 5px); right: auto; top: auto; bottom: 3px; border: 6px solid transparent; border-top: 8px solid var(--faint); border-bottom: 0; }
+  .diagram .arrow span { left: calc(50% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); text-align: left; }
+  .diagram .branch { grid-column: 1; grid-row: auto; order: 0; padding: 0; margin: -4px 0 4px; }
+  .diagram .branch::before, .diagram .branch::after { display: none; }
+  .diagram .node { min-height: 0; }
+}
+
+button.copy-rule {
+  font: 700 15px/1.2 "Maven Pro", sans-serif; cursor: pointer;
+  padding: 4px 12px; border-radius: 8px; margin: 2px 0;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+}
+button.copy-rule:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+button.copy-rule.done { background: var(--panel); color: var(--accent); }
+.archive { background: #1f3b33; color: #e8efe9; border-radius: 10px; padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.55; box-shadow: 0 18px 50px -24px rgba(10, 40, 30, 0.6); }
+.archive code { background: none; padding: 0; color: inherit; }
+.archive .h { color: #9fe3cb; }
+.archive .d { color: #8fa79e; }
+.modes { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
+.modes li { border: 1px solid var(--rule); background: var(--panel); border-radius: 8px; padding: 10px 14px; max-width: none; }
+.modes b { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <p class="crumb"><a href="/">Malcolm Ocean’s creations</a> / SlateWiper</p>
+  <h1>SlateWiper</h1>
+  <p class="tagline">One button that <mark>archives every open terminal session and browser tab</mark> somewhere findable, then closes them all.</p>
+  <p class="story">Every open tab and every idle agent session is a small implicit TODO. Closing them feels like losing something, so they stay open and keep asking. SlateWiper records all of it, including the exact command to resume each agent session, and then clears the slate. The point isn’t to lose nothing. It’s to be free to drop things without noticing you dropped them, knowing the state is still there if a project ever feels alive again. Projects stop being TODOs and become overhang.</p>
+  <ul class="badges">
+    <li class="hack">hacker tool: your coding agent sets it up</li>
+    <li>macOS</li>
+    <li>Terminal.app · Chrome</li>
+    <li>Claude Code · Codex sessions</li>
+  </ul>
+</header>
+
+<main class="wrap">
+  <h2>What a wipe leaves behind</h2>
+  <p>A dated archive in <code>~/slate/</code>, a note in each repo you had open, and screenshots of every window. An archive looks something like this:</p>
+<pre class="archive"><code><span class="h">- #[[slate wipe]] Oct 6, 2026, 4:41 p.m. — 6 terminals (5 agent sessions), 3 windows / 24 tabs</span>
+  - <span class="h">Terminals</span>
+    - claude · Refactor the parser
+      - cwd: `~/dev/tidepool` · branch `main` · <b>4 uncommitted</b>
+      - resume: `cd ~/dev/tidepool &amp;&amp; claude --resume 4f1c…`  <span class="d">(up 02:51:24, idle)</span>
+      - last you: ok, ship it once the fixtures are cleaned up
+      - last it: Done. Tests pass; I left the old fixtures in place until…
+    - codex · Batch transcription · <b>KEPT: working</b>
+      - resume: `cd ~/dev/podcast &amp;&amp; codex resume 019a…`  <span class="d">(up 11-16:35:55)</span>
+  - <span class="h">Chrome</span>
+    - [How to Do Great Work](…) <span class="d">· read 40%</span>
+    - [Issue #212: flaky upload test](…) <span class="d">· <b>KEPT (unsaved state)</b></span>
+    - …</code></pre>
+  <p>Next time you <code>cd</code> into one of those repos, your shell says a session was dropped there, and <code>unwipe</code> brings it back. <code>slate find &lt;text&gt;</code> searches every archive. Optionally it also lands on today’s page in Roam, or wherever your agent wires it to.</p>
+
+  <h2>Two buttons, and a preview</h2>
+  <ul class="modes">
+    <li><b>Soft wipe</b> closes everything that’s safe to close, no questions asked: idle agent sessions, empty shells, any tab Chrome lets go of. An agent mid-turn or babysitting a job survives, and so does a tab with unsaved text in it.</li>
+    <li><b>Hard wipe</b> takes the rest.</li>
+    <li><b>Snapshot</b> archives and closes nothing. It also runs on its own when the Mac shuts down.</li>
+  </ul>
+  <p>Plain <code>slatewipe</code> only previews. Git working trees are never touched in any mode. Trigger it from the command line, Spotlight, a hotkey, or a button on your phone.</p>
+
+  <h2>What it deliberately isn’t</h2>
+  <p>There’s no review queue, no snooze, no “process your archive” flow. Making it easier to finish things would defeat the point, which is making it easy to drop them. There’s no schedule either: you press the button.</p>
+
+  <h2>Getting it</h2>
+  <p>This is one person’s working setup, not a polished product, and most people’s setups differ: different terminal, different browser, a different place they’d want the archive to go. So instead of an installer that assumes my machine, the repo ships a prompt. <code>SETUP.md</code> tells your coding agent what the tool is for, the handful of macOS details that took real time to figure out, and how to interview you about your setup. Then it adapts the code to fit.</p>
+  <div class="codebox"><button class="copy" type="button">Copy</button><pre><code>git clone https://github.com/malcolmocean/slatewiper.git
+cd slatewiper
+claude "follow SETUP.md"</code></pre></div>
+  <p>Any coding agent works. Your own settings live in a <code>mine/</code> folder that the repo ignores, so you can pull updates, and you can make <code>mine/</code> its own private repo.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><a href="https://github.com/malcolmocean/slatewiper">Source on GitHub</a></span>
+    <span>Malcolm Ocean &amp; Claude, 2026</span>
+    <span><a href="/">more creations</a></span>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll(".codebox .copy").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var text = btn.parentNode.querySelector("code").textContent;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = "Copied";
+      setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+    }, function () { btn.textContent = "Select and copy by hand"; });
+  });
+});
+</script>
+</body>
+</html>
