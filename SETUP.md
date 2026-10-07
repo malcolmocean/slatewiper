@@ -18,8 +18,6 @@ its state is still recoverable.
 
 Design decisions that follow from that. Don't undo them without the person asking:
 
-- **A button, not a schedule.** They choose when to wipe. (An automatic *snapshot* on
-  power-off is fine, because it closes nothing.)
 - **Preview by default.** `slatewipe` with no flags touches nothing.
 - **Two tiers, no confirmation dialogs of our own.** A soft wipe closes only what needs
   no confirmation and reports what it left. A hard wipe takes the rest.
@@ -48,9 +46,12 @@ answers: look at `/Applications`, running processes, `~/.claude`, `~/.codex`, Ch
    profiles or folders → different destinations)? Most people don't. If not, leave the
    routing config empty.
 6. **Apps to quit** on a wipe (Slack, Discord, ...)? Desktop sweep, Finder windows?
-7. **Trigger:** command line only, Spotlight/Dock app, a hotkey (Keyboard Maestro,
-   Raycast, BetterTouchTool), a phone button? The phone button (server + Android app +
-   optional Cloudflare tunnel) is real work. Only set it up if they want it.
+7. **Trigger:** a button they press (command line, Spotlight/Dock app, a hotkey via
+   Keyboard Maestro / Raycast / BetterTouchTool), a schedule, or both? A schedule is a
+   LaunchAgent with `StartCalendarInterval` running `open -a SlateWiper --args --go`
+   (soft is the sane scheduled mode). A phone button? The server and Android app are
+   already built and working; the Cloudflare tunnel (for away from home) is the only
+   part that takes real setup. Only set these up if they want them.
 8. **Auto-snapshot on power-off?** (Default on, closes nothing.)
 
 ## Adapting

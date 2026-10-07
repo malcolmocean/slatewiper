@@ -183,15 +183,36 @@ button.copy-rule.done { background: var(--panel); color: var(--accent); }
 .modes { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
 .modes li { border: 1px solid var(--rule); background: var(--panel); border-radius: 8px; padding: 10px 14px; max-width: none; }
 .modes b { color: var(--accent); }
+.title { display: flex; align-items: center; gap: 24px; margin: 0 0 18px; }
+.title h1 { margin: 0; }
+.appicon { width: 120px; height: 120px; border-radius: 27px; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 14px 32px -12px rgba(10, 40, 30, .55); }
+.byline { margin: 8px 0 0; color: var(--faint); font-size: 15px; }
+@media (max-width: 520px) { .title { gap: 16px; } .appicon { width: 84px; height: 84px; border-radius: 19px; } }
+blockquote.journal { margin: 0 0 22px; padding: 2px 0 2px 18px; border-left: 3px solid var(--accent); max-width: 40rem; }
+blockquote.journal p { margin: 0 0 12px; }
+.journal-intro { color: var(--muted); margin: 0 0 10px; font-size: 15px; }
 </style>
 </head>
 <body>
 
 <header class="wrap">
   <p class="crumb"><a href="/">Malcolm Ocean’s creations</a> / SlateWiper</p>
-  <h1>SlateWiper</h1>
+  <div class="title"><img class="appicon" src="icon.jpg" width="480" height="480" alt="App icon: a hand wiping a chalkboard clean with an eraser"><div><h1>SlateWiper</h1><p class="byline">by Malcolm Ocean &amp; Claude</p></div></div>
   <p class="tagline">One button that <mark>archives every open terminal session and browser tab</mark> somewhere findable, then closes them all.</p>
-  <p class="story">Every open tab and every idle agent session is a small implicit TODO. Closing them feels like losing something, so they stay open and keep asking. SlateWiper records all of it, including the exact command to resume each agent session, and then clears the slate. The point isn’t to lose nothing. It’s to be free to drop things without noticing you dropped them, knowing the state is still there if a project ever feels alive again. Projects stop being TODOs and become overhang.</p>
+  <p class="journal-intro">The journal entry that started it:</p>
+  <blockquote class="journal">
+    <p>I came to a realization last night, maybe just while I was laying in bed headed to sleep, that I have been taking a kind of stance in general in relation to my life that is less aliveness first and more completionist first, and that most of the good things in my life come from being more aliveness first. And this was part of the whole point of Complice. And it’s weird because finishing things is also critical. Shipping things is critical, but I want to say something like: the right way to make shipping things happen more is you want to reduce the friction to shipping. So for instance, having the <a href="/">creations.malcolmocean.com</a> site reduces the amount of thinking that I have to do in order to publish something that I created at all, and fucking great. But there are dozens of things I could publish there. And I noticed that there was an inclination to kind of go back and go through all of my various projects and be like, which of these should I publish? And like, that’s a thing that I could get inspired to do at some point. But there’s also a stance that just waits until a given project feels alive again, which is like what happened with the <a href="/outgroups/">Jesus parameterization</a>: I returned to that because I was excited about it again, not because I thought that it needed to be shipped for some completiony reason.</p>
+    <p>So the insight here is that this takes projects from being implicit TODOs to finish them, to all just being overhang, while I’m free in each moment again.</p>
+    <p>And there’s a question of how to do this on an operating system level. Like, part of me just legit wants to experiment with a system where every day my browser tabs and open terminal windows just all get nuked, and the session state is stored somewhere, but it is stored in a place where I can go find it. Not in a place where it’s cluttering my active state. Like I become more free to <em>just drop things</em>. Without even noticing I’ve dropped them.</p>
+    <p>And I think that I could actually make a system for this. That would be pretty good. Like any open task that gets nuked like this could have a little file written into the repo that it was open in.</p>
+    <p><em>What do I think will save me this time?</em> (<a href="https://x.com/OortCloudAtlas/status/1166713422248964096">#metadharma koan</a>)</p>
+    <p>Ultimately this is about a stance though. Being unburdened. Recognizing that if I lost all of that state I would really truly be fine.</p>
+    <p>Begin again, begin again.</p>
+    <p>Become a new homunculus.</p>
+    <p>Except ugh nondual lol.</p>
+    <p>There’s something I’m cultivating here that feels good.</p>
+    <p>Determination.</p>
+  </blockquote>
   <ul class="badges">
     <li class="hack">hacker tool: your coding agent sets it up</li>
     <li>macOS</li>
@@ -220,17 +241,17 @@ button.copy-rule.done { background: var(--panel); color: var(--accent); }
 
   <h2>Two buttons, and a preview</h2>
   <ul class="modes">
-    <li><b>Soft wipe</b> closes everything that’s safe to close, no questions asked: idle agent sessions, empty shells, any tab Chrome lets go of. An agent mid-turn or babysitting a job survives, and so does a tab with unsaved text in it.</li>
+    <li><b>Soft wipe</b> closes everything that’s safe to close, no questions asked: idle agent sessions, empty shells, any tab Chrome lets go of. An agent mid-turn or babysitting a job survives, and so does any tab that would ask “Are you sure you want to close this tab?” (anything with an armed <code>beforeunload</code> handler, which is how pages guard unsaved state). That dialog is left up for you to answer.</li>
     <li><b>Hard wipe</b> takes the rest.</li>
     <li><b>Snapshot</b> archives and closes nothing. It also runs on its own when the Mac shuts down.</li>
   </ul>
-  <p>Plain <code>slatewipe</code> only previews. Git working trees are never touched in any mode. Trigger it from the command line, Spotlight, a hotkey, or a button on your phone.</p>
+  <p>Plain <code>slatewipe</code> only previews. Git working trees are never touched in any mode. Trigger it from the command line, Spotlight, a hotkey, or a schedule. There’s also a button for your phone: a small server and an Android app are included and working, with optional Cloudflare Tunnel setup so it works away from home.</p>
 
   <h2>What it deliberately isn’t</h2>
-  <p>There’s no review queue, no snooze, no “process your archive” flow. Making it easier to finish things would defeat the point, which is making it easy to drop them. There’s no schedule either: you press the button.</p>
+  <p>There’s no review queue, no snooze, no “process your archive” flow. Making it easier to finish things would defeat the point, which is making it easy to drop them.</p>
 
   <h2>Getting it</h2>
-  <p>This is one person’s working setup, not a polished product, and most people’s setups differ: different terminal, different browser, a different place they’d want the archive to go. So instead of an installer that assumes my machine, the repo ships a prompt. <code>SETUP.md</code> tells your coding agent what the tool is for, the handful of macOS details that took real time to figure out, and how to interview you about your setup. Then it adapts the code to fit.</p>
+  <p>This is one person’s working setup, not a polished product, and most people’s setups differ: different terminal, different browser, a different place they’d want the archive to go. So instead of an installer that assumes Malcolm’s machine, the repo ships a prompt. <code>SETUP.md</code> tells your coding agent what the tool is for, the handful of macOS details that took real time to figure out, and how to interview you about your setup. Then it adapts the code to fit.</p>
   <div class="codebox"><button class="copy" type="button">Copy</button><pre><code>git clone https://github.com/malcolmocean/slatewiper.git
 cd slatewiper
 claude "follow SETUP.md"</code></pre></div>
