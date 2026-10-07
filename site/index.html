@@ -191,6 +191,12 @@ button.copy-rule.done { background: var(--panel); color: var(--accent); }
 blockquote.journal { margin: 0 0 22px; padding: 2px 0 2px 18px; border-left: 3px solid var(--accent); max-width: 40rem; }
 blockquote.journal p { margin: 0 0 12px; }
 .journal-intro { color: var(--muted); margin: 0 0 10px; font-size: 15px; }
+.epigraph { font-size: 19px; color: var(--muted); margin: 0 0 26px; max-width: 36rem; }
+.journal .sep { color: var(--faint); margin: 0 0 12px; }
+blockquote.pasted { margin: 0 0 12px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; font-size: 16px; }
+blockquote.pasted p:last-child { margin-bottom: 0; }
+.journal a { overflow-wrap: anywhere; }
+.tagline.result { margin-top: 28px; }
 </style>
 </head>
 <body>
@@ -198,9 +204,12 @@ blockquote.journal p { margin: 0 0 12px; }
 <header class="wrap">
   <p class="crumb"><a href="/">Malcolm Ocean’s creations</a> / SlateWiper</p>
   <div class="title"><img class="appicon" src="icon.jpg" width="480" height="480" alt="App icon: a hand wiping a chalkboard clean with an eraser"><div><h1>SlateWiper</h1><p class="byline">by Malcolm Ocean &amp; Claude</p></div></div>
-  <p class="tagline">One button that <mark>archives every open terminal session and browser tab</mark> somewhere findable, then closes them all.</p>
-  <p class="journal-intro">The journal entry that started it:</p>
+  <p class="epigraph"><em>“A piece of software described in sufficient detail is now worth that piece of software.”</em></p>
+  <p class="journal-intro">Malcolm to Claude:</p>
   <blockquote class="journal">
+    <p>I have a system I want to make, that keeps my computer state from becoming a stale TODO list</p>
+    <p class="sep">--</p>
+    <blockquote class="pasted">
     <p>I came to a realization last night, maybe just while I was laying in bed headed to sleep, that I have been taking a kind of stance in general in relation to my life that is less aliveness first and more completionist first, and that most of the good things in my life come from being more aliveness first. And this was part of the whole point of <a href="https://intend.do/philosophy?utm_source=creations&amp;utm_medium=referral&amp;utm_campaign=slatewiper">Complice/Intend</a>. And it’s weird because finishing things is also critical. Shipping things is critical, but I want to say something like: the right way to make shipping things happen more is you want to reduce the friction to shipping. So for instance, having the <a href="/">creations.malcolmocean.com</a> site reduces the amount of thinking that I have to do in order to publish something that I created at all, and fucking great. But there are dozens of things I could publish there. And I noticed that there was an inclination to kind of go back and go through all of my various projects and be like, which of these should I publish? And like, that’s a thing that I could get inspired to do at some point. But there’s also a stance that just waits until a given project feels alive again, which is like what happened with the <a href="/outgroups/">Jesus parameterization</a>: I returned to that because I was excited about it again, not because I thought that it needed to be shipped for some completiony reason.</p>
     <p>So the insight here is that this takes projects from being implicit TODOs to finish them, to all just being overhang, while I’m free in each moment again.</p>
     <p>And there’s a question of how to do this on an operating system level. Like, part of me just legit wants to experiment with a system where every day my browser tabs and open terminal windows just all get nuked, and the session state is stored somewhere, but it is stored in a place where I can go find it. Not in a place where it’s cluttering my active state. Like I become more free to <em>just drop things</em>. Without even noticing I’ve dropped them.</p>
@@ -212,7 +221,14 @@ blockquote.journal p { margin: 0 0 12px; }
     <p>Except ugh nondual lol.</p>
     <p>There’s something I’m cultivating here that feels good.</p>
     <p>Determination.</p>
+    </blockquote>
+    <p class="sep">--</p>
+    <p>for now let’s not do a time of day, just a button<br>and ofc we should do it as a “preview” first</p>
+    <p>there’s also some good related inspo in my roam:<br><a href="https://roamresearch.com/#/app/malcolmocean/page/fFqzevI7Y">https://roamresearch.com/#/app/malcolmocean/page/fFqzevI7Y</a></p>
+    <p class="sep">--</p>
+    <p>probably this’ll be something where you want to ask me some Qs first</p>
   </blockquote>
+  <p class="tagline result">What came out of it: one button that <mark>archives every open terminal session and browser tab</mark> somewhere findable, then closes them all.</p>
   <ul class="badges">
     <li class="hack">hacker tool: your coding agent sets it up</li>
     <li>macOS</li>
