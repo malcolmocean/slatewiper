@@ -257,7 +257,7 @@ blockquote.pasted p:last-child { margin-bottom: 0; }
 
   <h2>Two buttons, and a preview</h2>
   <ul class="modes">
-    <li><b>Soft wipe</b> closes everything that’s safe to close, no questions asked: idle agent sessions, empty shells, any tab Chrome lets go of. An agent mid-turn or babysitting a job survives, and so does any tab that would ask “Are you sure you want to close this tab?” (anything with an armed <code>beforeunload</code> handler, which is how pages guard unsaved state). That dialog is left up for you to answer.</li>
+    <li><b>Soft wipe</b> closes everything that’s safe to close, no questions asked: idle agent sessions, empty shells, any tab Chrome lets go of. An agent mid-turn or babysitting a job survives, and so does any tab that would ask “Are you sure you want to close this tab?” (anything with an armed <code>beforeunload</code> handler, which is how pages guard unsaved state). That dialog is left up for you to answer. A tab that’s on a call (camera or mic live) or audibly playing something is left alone too.</li>
     <li><b>Hard wipe</b> takes the rest.</li>
     <li><b>Snapshot</b> archives and closes nothing. It also runs on its own when the Mac shuts down.</li>
   </ul>

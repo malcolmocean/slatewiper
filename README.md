@@ -32,8 +32,8 @@ Your own settings go in `mine/` (see [Configuration](#configuration)).
 slatewipe                 PREVIEW (default). Prints the archive and the plan. Touches nothing.
 slatewipe --go            SOFT wipe. Archive, then close everything that's safe to close, no questions asked.
                           Reports what it left alone.
-slatewipe --go --hard     HARD wipe. Also kills working agent sessions / busy shells, and disarms
-                          pages' unsaved-state check so they close too.
+slatewipe --go --hard     HARD wipe. Also kills working agent sessions / busy shells, closes live tabs,
+                          and disarms pages' unsaved-state check so they close too.
 slatewipe --snapshot      Archive only. Closes nothing. A save point.
 slatewipe find <text>     Search every archive (tab titles, URLs, session titles, folders).
 slatewipe --json          Dump collected state.
@@ -48,6 +48,8 @@ slate ...                 zsh function for the above; `unwipe` resumes a dropped
   survives, with Chrome's own Leave / Cancel dialog left up. That dialog *is*
   the per-tab hard-reset button. Answer it before the next wipe: Chrome's
   AppleScript interface wedges while a dialog is pending.
+  **Live tabs** survive too: a call using your camera/mic, or media audibly
+  playing. These aren't handed to Chrome at all.
 - **Agent sessions (Claude Code / Codex):** idle ones. A session that's mid-turn
   or has a child process (babysitting a batch job, running a dev server) is
   *working* and survives.
@@ -177,13 +179,17 @@ request, and anything without them dies at Cloudflare's edge.
 
 - macOS, Terminal.app, Google Chrome, Node ≥ 18, Xcode command line tools (`cc`).
 - Chrome menu bar → **View → Developer → Allow JavaScript from Apple Events** (on). Gives
-  `read N%` per tab and lets hard mode disarm `beforeunload`.
+  `read N%` per tab, live-tab detection, and lets hard mode disarm `beforeunload`. With it
+  off, nothing can tell a playing video from a dead one, so live tabs get closed.
 
 ## Known limits
 
 - Hard mode's disarm injects a `<script>` into the page (AppleScript JS runs in an
   isolated world, so it has to). Sites with strict nonce-based CSP (Gmail, X) reject the
   injection; those tabs survive a hard wipe too, with the dialog up.
+- Live-tab detection looks at `<video>`/`<audio>` elements in the top frame. It misses media
+  inside iframes (an embedded YouTube player in an article), Web Audio, and mic use with no
+  element attached (some voice-input UIs). Video calls attach the streams, so they're caught.
 - Terminal windows are closed whole. A window mixing closable and kept tabs is left alone.
 - Only Chrome and Terminal.app. Safari, Arc, iTerm, Ghostty: not handled (yet; SETUP.md
   tells your agent how to add them).

@@ -19,6 +19,8 @@
 //     or has a child process running (babysitting a batch job, a dev server) is
 //     "working" and survives a soft wipe.
 //   - bare shells: ones with nothing running.
+//   - live tabs (a call using camera/mic, or media audibly playing) survive a
+//     soft wipe too; a hard wipe closes them.
 // Git working trees are never touched by either mode.
 
 import { execFileSync, execSync } from 'node:child_process';
@@ -206,7 +208,11 @@ function runSweeps(dir) {
 }
 
 // ---------- chrome ----------
-const PROBE = `(()=>{try{const de=document.documentElement,sh=Math.max(de.scrollHeight,document.body?.scrollHeight||0);return JSON.stringify({y:Math.round(scrollY),sh,ih:innerHeight})}catch(e){return JSON.stringify({err:String(e)})}})()`;
+// Also reports `live`: a <video>/<audio> fed by a live MediaStream (a call using
+// camera/mic), or one audibly playing. Media element state is DOM, so the
+// isolated world sees it. Blind to: iframes (e.g. an embedded YouTube player),
+// Web Audio, and mic use with no element attached.
+const PROBE = `(()=>{try{const de=document.documentElement,sh=Math.max(de.scrollHeight,document.body?.scrollHeight||0);let live=null;for(const m of document.querySelectorAll('video,audio')){const so=m.srcObject;if(so&&typeof so.getTracks==='function'&&so.getTracks().some(t=>t.readyState==='live')){live='call in progress (camera/mic)';break}if(!m.paused&&!m.ended&&!m.muted&&m.volume>0&&m.readyState>2)live='media playing'}return JSON.stringify({y:Math.round(scrollY),sh,ih:innerHeight,live})}catch(e){return JSON.stringify({err:String(e)})}})()`;
 function collectChrome() {
   const r = jxa(`const C = Application('Google Chrome');
     if (!C.running()) JSON.stringify({ running: false, windows: [] }); else {
@@ -226,6 +232,7 @@ function collectChrome() {
     w.scope = w.profile && PERSONAL_PROFILES.length ? (PERSONAL_PROFILES.includes(w.profile) ? 'personal' : 'work') : null;
     for (const t of w.tabs) {
       const p = t.probe; if (p && !p.err && p.sh > 0) t.readPct = Math.min(100, Math.round(((p.y + p.ih) / p.sh) * 100));
+      t.live = p?.live || null; t.keepWhy = t.live && !HARD ? t.live : null;
       t.scope = w.scope || (WORK_URL_PATTERNS.some(re => re.test(t.url)) ? 'work' : 'personal');
     }
   }
@@ -265,7 +272,7 @@ function render(state, result) {
     L.push(`    - ${w.pwa ? `${w.pwa} PWA` : 'window'} ${i + 1} (${w.tabs.length} tabs${w.profile ? `, ${w.profile}` : ''})${w.shot ? ` · [screenshot](${w.shot})` : ''}`);
     for (const t of w.tabs) {
       const pct = t.readPct != null ? ` · read ${t.readPct}%` : '';
-      const kept = result?.survivedTabs?.includes(t.id) ? ' · **KEPT: Chrome refused (unsaved state) — Leave/Cancel dialog pending**' : '';
+      const kept = t.keepWhy ? ` · **KEPT: ${t.keepWhy}**` : result?.survivedTabs?.includes(t.id) ? ' · **KEPT: Chrome refused (unsaved state) — Leave/Cancel dialog pending**' : t.live ? ` · ${t.live}` : '';
       L.push(`      - [${short(t.title || t.url, 90)}](${t.url})${pct}${kept}`);
     }
   });
@@ -337,7 +344,7 @@ function roamTree(state, scope, result) {
   if (scope === 'personal' && state.finder?.paths?.length) kids.push({ string: `**Finder:** ${state.finder.paths.map(p => `\`${p}\``).join(', ')}` });
   const tabs = state.chrome.windows.flatMap((w, i) => w.tabs.map(t => ({ ...t, win: i + 1 }))).filter(t => t.scope === scope);
   if (tabs.length) {
-    kids.push({ string: '**Chrome**', children: tabs.map(t => ({ string: `[${short(t.title || t.url, 90).replace(/[\[\]]/g, '')}](${t.url})${t.readPct != null ? ` · read ${t.readPct}%` : ''}${result?.survivedTabs?.includes(t.id) ? ' · **KEPT (unsaved state)**' : ''}` })) });
+    kids.push({ string: '**Chrome**', children: tabs.map(t => ({ string: `[${short(t.title || t.url, 90).replace(/[\[\]]/g, '')}](${t.url})${t.readPct != null ? ` · read ${t.readPct}%` : ''}${t.keepWhy ? ` · **KEPT: ${t.keepWhy}**` : result?.survivedTabs?.includes(t.id) ? ' · **KEPT (unsaved state)**' : ''}` })) });
   }
   if (!kids.length) return null;
   return { string: `#[[slate ${SNAPSHOT ? 'snapshot' : 'wipe'}]] ${state.time} — ${terms.length} terminals, ${tabs.length} tabs${HARD ? ' — HARD' : ''}`, children: kids };
@@ -408,7 +415,8 @@ function closeChromeTabs(state) {
   // Soft: close each tab; Chrome refuses (and shows its Leave-site dialog) for
   // pages with real unsaved state you've interacted with — those survive.
   // Hard: disarm beforeunload in the page first, then close.
-  const ids = state.chrome.windows.flatMap(w => w.tabs.map(t => t.id));
+  // Live tabs (call / media playing) are never handed to Chrome on a soft wipe.
+  const ids = state.chrome.windows.flatMap(w => w.tabs.filter(t => !t.keepWhy).map(t => t.id));
   if (!ids.length) return { closed: 0, survivedTabs: [] };
   const r = jxa(`const C = Application('Google Chrome'); C.includeStandardAdditions = true;
     const ids = ${JSON.stringify(ids)}; const byId = {};
@@ -473,6 +481,7 @@ if (args.has('--json')) { console.log(JSON.stringify(state, null, 2)); process.e
 const allTabs = state.chrome.windows.flatMap(w => w.tabs);
 const termTabs = state.terminals.windows.flatMap(w => w.tabs);
 const closableTerms = termTabs.filter(t => t.closable), keptTerms = termTabs.filter(t => !t.closable && !t.isSelf);
+const liveTabs = allTabs.filter(t => t.keepWhy);
 const repos = [...new Set(termTabs.filter(t => t.repo && !t.isSelf).map(t => t.repo.root))];
 const describe = (t) => `${t.session ? `${t.session.kind} · ${t.session.title || t.session.name || ''}` : 'shell'} (${path.basename(t.cwd || '?')})`;
 
@@ -490,15 +499,16 @@ if (SNAPSHOT) {
   console.log(`PREVIEW — nothing closed or written. \`slatewipe --go\` (soft) would:`);
   console.log(`  • archive to ${ARCHIVE_ROOT}/${state.ts}/slate.md, .slate/ in ${repos.length} repos (${repos.map(r => path.basename(r)).join(', ')}), push to Roam`);
   console.log(`  • close ${closableTerms.length} terminals: ${closableTerms.filter(t => t.session).length} idle agent sessions + ${closableTerms.filter(t => !t.session).length} idle shells`);
-  console.log(`  • try to close all ${allTabs.length} Chrome tabs; Chrome keeps any with real unsaved state (you'll see its Leave/Cancel dialog on those)`);
+  console.log(`  • try to close ${allTabs.length - liveTabs.length} Chrome tabs; Chrome keeps any with real unsaved state (you'll see its Leave/Cancel dialog on those)`);
   console.log(`  • quit ${state.apps.toQuit.length} apps: ${state.apps.toQuit.join(', ') || '(none of the nuke-list is running)'}${state.cursor.running ? ' (Cursor folders recorded on quit)' : ''}`);
   if (FINDER_CLOSE && state.finder.paths.length) console.log(`  • close ${state.finder.paths.length} Finder windows`);
   const sweeps = [SWEEP.desktop?.enabled && 'Desktop', SWEEP.downloads?.enabled && `Downloads (>${SWEEP.downloads.olderThanDays ?? 1}d old)`].filter(Boolean);
   if (sweeps.length) console.log(`  • sweep ${sweeps.join(' and ')} into the archive`);
   if (AFTER_URLS.length) console.log(`  • then open: ${AFTER_URLS.join(', ')}`);
-  console.log(`  • leave untouched (${keptTerms.length}):`);
+  console.log(`  • leave untouched (${keptTerms.length + liveTabs.length}):`);
   for (const t of keptTerms) console.log(`      - ${describe(t)} — ${t.keepWhy}`);
-  console.log(`  \`--go --hard\` would also kill those ${keptTerms.length}.`);
+  for (const t of liveTabs) console.log(`      - tab "${short(t.title || t.url, 70)}" — ${t.keepWhy}`);
+  console.log(`  \`--go --hard\` would also kill those ${keptTerms.length + liveTabs.length}.`);
   printRepoAwareness();
   if (state.chrome.jsEnabled === false) console.log(`  ! Chrome JS-from-AppleScript is off, so read% is unavailable. View → Developer → Allow JavaScript from Apple Events`);
   if (state.terminals.error) console.log(`  ! Terminal: ${state.terminals.error}`);
@@ -520,14 +530,15 @@ if (SNAPSHOT) {
   const finalMd = render(state, result); writeArchive(state, finalMd); // again: now with Cursor folders + sweep results
   if (!args.has('--no-roam')) await pushRoam(state, result, (m) => console.log(m));
   const survivors = allTabs.filter(t => tabRes.survivedTabs.includes(t.id));
-  if (keptTerms.length || survivors.length || appRes.refused.length) {
+  if (keptTerms.length || liveTabs.length || survivors.length || appRes.refused.length) {
     console.log(`\nUNTOUCHED:`);
     for (const a of appRes.refused) console.log(`  - app ${a} — refused to quit (unsaved documents?)`);
     for (const t of keptTerms) console.log(`  - ${describe(t)} — ${t.keepWhy}`);
+    for (const t of liveTabs) console.log(`  - tab "${short(t.title || t.url, 70)}" — ${t.keepWhy}`);
     for (const t of survivors) console.log(`  - tab "${short(t.title || t.url, 70)}" — Chrome says unsaved state; its Leave/Cancel dialog is up (answer it before the next wipe)`);
-    if (keptTerms.length || survivors.length) console.log(`  (\`slatewipe --go --hard\` kills the terminals too and disarms the tabs' unsaved-state check)`);
+    if (keptTerms.length || liveTabs.length || survivors.length) console.log(`  (\`slatewipe --go --hard\` kills the terminals too, closes live tabs, and disarms the tabs' unsaved-state check)`);
   }
-  const untouched = keptTerms.length + survivors.length + appRes.refused.length;
+  const untouched = keptTerms.length + liveTabs.length + survivors.length + appRes.refused.length;
   notify('Slate wiped', `closed ${tabRes.closed} tabs, ${termRes.closedWindows} terminals, ${appRes.quit.length} apps${untouched ? ` · ${untouched} untouched` : ''}. Begin again.`);
   printRepoAwareness();
   for (const u of AFTER_URLS) sh(`open -a 'Google Chrome' ${q(u)}`);
