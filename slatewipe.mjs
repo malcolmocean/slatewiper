@@ -273,11 +273,14 @@ function render(state, result) {
 }
 
 // ---------- archive ----------
+// Repo .slate/ markers mean "something was dropped here", so a snapshot (closes
+// nothing) writes none, and a wipe skips terminals it kept: they're still open.
 function writeArchive(state, md) {
   const dir = path.join(ARCHIVE_ROOT, state.ts); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'slate.md'), md); fs.writeFileSync(path.join(dir, 'slate.json'), JSON.stringify(state, null, 2));
+  if (state.mode === 'snapshot') return dir;
   const byRepo = {};
-  for (const w of state.terminals.windows) for (const t of w.tabs) if (t.repo && !t.isSelf) (byRepo[t.repo.root] ||= []).push(t);
+  for (const w of state.terminals.windows) for (const t of w.tabs) if (t.repo && !t.isSelf && !t.keepWhy) (byRepo[t.repo.root] ||= []).push(t);
   for (const f of state.cursor?.folders || []) { const root = sh(`git -C ${q(f)} rev-parse --show-toplevel`) || f; if (fs.existsSync(root)) (byRepo[root] ||= []).push({ cursorFolder: f }); }
   for (const [root, tabs] of Object.entries(byRepo)) {
     const d = path.join(root, '.slate'); fs.mkdirSync(d, { recursive: true });
@@ -285,7 +288,7 @@ function writeArchive(state, md) {
     for (const t of tabs) {
       if (t.cursorFolder) { lines.push(`- cursor: ${path.basename(t.cursorFolder)} (cwd ${t.cursorFolder})`, `  - resume: \`open -a Cursor ${q(t.cursorFolder)}\``); continue; }
       const s = t.session;
-      lines.push(`- ${s ? `${s.kind}: ${s.title || s.name || ''}` : 'shell'} (cwd ${t.cwd})${t.keepWhy ? ` — kept: ${t.keepWhy}` : ''}`);
+      lines.push(`- ${s ? `${s.kind}: ${s.title || s.name || ''}` : 'shell'} (cwd ${t.cwd})`);
       if (s) { lines.push(`  - resume: \`${s.resume}\``); if (s.lastUser) lines.push(`  - last you: ${s.lastUser}`); if (s.lastAssistant) lines.push(`  - last it: ${s.lastAssistant}`); }
     }
     fs.writeFileSync(path.join(d, `${state.ts}.md`), lines.join('\n') + '\n');

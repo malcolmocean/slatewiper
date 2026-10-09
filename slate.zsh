@@ -38,6 +38,7 @@ _slate_notice
 # unwipe            resume the most recent dropped agent session in this repo (asks if several)
 # unwipe N          resume the Nth from `unwipe -l`
 # unwipe -l         list resumable sessions here, newest wipe first
+# A session dropped in several wipes is listed once, under its newest wipe.
 unwipe() {
   local dir; dir=$(_slate_dir)
   local -a files; files=($dir/*.md(N.om))
@@ -48,7 +49,9 @@ unwipe() {
     label=""
     while IFS= read -r line; do
       if [[ $line =~ '^- (claude|codex|cursor)(: )?(.*) \(cwd' ]]; then label="${match[1]} · ${match[3]}"
-      elif [[ $line =~ '^  - resume: `(.*)`$' && -n $label ]]; then labels+=("$label  %F{244}[${${f:t:r}%%_*}]%f"); cmds+=("${match[1]}"); label=""
+      elif [[ $line =~ '^  - resume: `(.*)`$' && -n $label ]]; then
+        (( ${cmds[(Ie)${match[1]}]} )) || { labels+=("$label  %F{244}[${${f:t:r}%%_*}]%f"); cmds+=("${match[1]}"); }
+        label=""
       fi
     done < $f
   done
