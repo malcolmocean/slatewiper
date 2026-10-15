@@ -17,7 +17,7 @@ if [ ${#ARGS[@]} -eq 0 ]; then
     *) exit 0 ;;
   esac
 fi
-case " ${ARGS[*]} " in *" --go "*|*" --snapshot "*) ;; *) ARGS+=(--go);; esac   # the app never just previews
+case " ${ARGS[*]} " in *" --go "*|*" --snapshot "*|*" --grant-screen "*) ;; *) ARGS+=(--go);; esac   # the app never just previews
 {
   echo "=== $(date) slatewipe ${ARGS[*]}"
   node "$REPO/slatewipe.mjs" "${ARGS[@]}" --notify

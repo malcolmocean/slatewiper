@@ -137,8 +137,10 @@ open -a SlateWiper --args --snapshot      # save point
 ```
 
 Output goes to `~/slate/app.log` plus a macOS notification. First run prompts for
-Automation (Terminal, Chrome, System Events); grant Screen Recording in System Settings →
-Privacy & Security → Screen Recording → SlateWiper to get window screenshots.
+Automation (Terminal, Chrome, System Events). For window screenshots, run
+`open -a SlateWiper --args --grant-screen` once and turn SlateWiper on in System Settings →
+Privacy & Security → Screen & System Audio Recording. Without that grant, wipes skip
+screenshots silently rather than asking every time.
 
 ## The server (phone button, optional)
 

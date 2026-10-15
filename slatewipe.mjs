@@ -9,6 +9,7 @@
 //   slatewipe find <text>  search every archive for a tab/session/folder
 //   slatewipe --json       dump collected state
 //   --no-roam              skip the Roam push
+//   --grant-screen         ask for Screen Recording (for window screenshots); run via the app
 //
 // "Safe to close" means:
 //   - browser tabs: anything Chrome itself lets us close. A page that raises a
@@ -154,11 +155,15 @@ function repoInfo(cwd) {
 }
 
 // ---------- apps ----------
+// Automation browsers (Playwright etc.) — always quit, every instance. Often several
+// run at once under the same name, which Application(name).quit() can't tell
+// apart, so they get SIGTERM, which Chrome treats as a clean quit.
+const CHROME_TESTING = 'Google Chrome for Testing';
 function collectApps() {
   const r = jxa(`JSON.stringify(Application('System Events').applicationProcesses.whose({ backgroundOnly: false }).name())`, 20_000);
   if (r.__error) return { error: r.__error, running: [], toQuit: [] };
-  const running = r.filter(n => n !== 'Finder');
-  const toQuit = QUIT_APPS.filter(a => running.some(n => n.toLowerCase() === a.toLowerCase()));
+  const running = [...new Set(r)].filter(n => n !== 'Finder');
+  const toQuit = [...new Set([...QUIT_APPS, CHROME_TESTING])].filter(a => running.some(n => n.toLowerCase() === a.toLowerCase()));
   return { running, toQuit };
 }
 
@@ -376,12 +381,14 @@ async function pushRoam(state, result, log) {
 
 // ---------- screenshots ----------
 // Needs Screen Recording permission for the *responsible app* (SlateWiper.app,
-// not Terminal). Silently skipped otherwise. Terminal's AppleScript window id
+// not Terminal). Checked with CGPreflightScreenCaptureAccess, which never
+// prompts; without the grant, screenshots are skipped (a test capture would
+// raise the permission dialog on every run). Terminal's AppleScript window id
 // is its CGWindowID; Chrome's isn't, so Chrome windows are matched by bounds.
+const SCREEN_FN = (fn) => jxa(`ObjC.import('CoreGraphics'); ObjC.bindFunction('${fn}', ['bool', []]); JSON.stringify($.${fn}())`, 10_000);
+const screenAccess = () => SCREEN_FN('CGPreflightScreenCaptureAccess') === true;
 function takeScreenshots(state, dir) {
-  let probe; try { probe = execSync(`screencapture -x -t jpg ${q(path.join(dir, '.probe.jpg'))} 2>&1; echo "exit=$?"`, { encoding: 'utf8' }).trim(); } catch (e) { probe = String(e.message); }
-  try { fs.unlinkSync(path.join(dir, '.probe.jpg')); } catch {}
-  if (!/exit=0$/.test(probe) || /could not/i.test(probe)) return { skipped: `no Screen Recording permission for this app (${probe.replace(/\s+/g, ' ').slice(0, 120)})` };
+  if (!screenAccess()) return { skipped: `no Screen Recording permission for this app (grant it: open -a SlateWiper --args --grant-screen)` };
   let n = 0;
   state.terminals.windows.forEach((w, i) => {
     const f = `terminal-${i + 1}.png`;
@@ -433,7 +440,10 @@ function closeChromeTabs(state) {
 
 function quitApps(state) {
   const names = state.apps.toQuit; if (!names.length) return { quit: [], refused: [] };
-  for (const n of names) jxa(`try { Application(${JSON.stringify(n)}).quit(); } catch (e) {} JSON.stringify(1)`, 15_000);
+  for (const n of names) {
+    if (n === CHROME_TESTING) { sh(`pkill -TERM -x ${q(n)}`); continue; }
+    jxa(`try { Application(${JSON.stringify(n)}).quit(); } catch (e) {} JSON.stringify(1)`, 15_000);
+  }
   const deadline = Date.now() + QUIT_GRACE; let still = names;
   while (Date.now() < deadline && still.length) {
     sleep(1000);
@@ -473,6 +483,11 @@ function printRepoAwareness() {
 }
 
 // ---------- main ----------
+if (args.has('--grant-screen')) { // run via the app so the grant lands on SlateWiper: open -a SlateWiper --args --grant-screen
+  const ok = screenAccess() || SCREEN_FN('CGRequestScreenCaptureAccess') === true;
+  console.log(ok ? 'Screen Recording: granted' : 'Screen Recording: not granted yet. Turn SlateWiper on in System Settings → Privacy & Security → Screen & System Audio Recording.');
+  process.exit(0);
+}
 const now = new Date();
 const state = { ts: stamp(now), human: now.toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }), time: now.toLocaleTimeString('en-CA', { timeStyle: 'short' }), host: os.hostname(), mode: SNAPSHOT ? 'snapshot' : GO ? (HARD ? 'hard' : 'soft') : 'preview', terminals: collectTerminals(), chrome: collectChrome(), apps: collectApps() };
 state.cursor = collectCursor(state.apps); state.finder = collectFinder();
