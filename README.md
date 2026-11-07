@@ -37,9 +37,23 @@ slatewipe --go --hard     HARD wipe. Also kills working agent sessions / busy sh
 slatewipe --snapshot      Archive only. Closes nothing. A save point.
 slatewipe find <text>     Search every archive (tab titles, URLs, session titles, folders).
 slatewipe --json          Dump collected state.
+slatewipe in <min>        TIMER. Soft wipe in <min> minutes (--hard for a hard one). Replaces any armed timer.
+slatewipe timer [cancel]  What's armed / disarm it.
 slate ...                 zsh function for the above; `unwipe` resumes a dropped session in the current repo.
   --no-roam               Skip the Roam push (if you use Roam).
 ```
+
+## Timer
+
+"Nuke everything in N minutes." One timer at a time, armed from any entry point: the phone page
+(5m / 20m / 1h / 5h chips or a custom number, with a *hard* checkbox; shows a live countdown and
+Cancel once armed), the app's chooser (*Timer — soft wipe in N minutes…*, then the same presets or
+Custom; a *Cancel timer* item appears while one is armed), or the CLI (`slate in 20 [--hard]`).
+
+`timer.mjs` keeps the state in `~/slate/timer.json` and a detached waiter process watches the
+wall clock, so it survives closing the terminal or restarting the server, and a Mac that slept
+through the deadline wipes on wake. Notifications at 5 min and 1 min out. The wipe itself runs
+through SlateWiper.app like any other. A reboot disarms it. Log: `~/slate/timer.log`.
 
 ## What "safe to close" means (soft mode)
 
@@ -134,6 +148,8 @@ it runs them directly and never previews.
 open -a SlateWiper --args --go            # soft wipe
 open -a SlateWiper --args --go --hard     # hard wipe
 open -a SlateWiper --args --snapshot      # save point
+open -a SlateWiper --args --in 20 [--hard]   # arm the timer
+open -a SlateWiper --args --cancel-timer
 ```
 
 Output goes to `~/slate/app.log` plus a macOS notification. First run prompts for
@@ -150,11 +166,16 @@ and the live log. It launches runs through SlateWiper.app, so permissions are th
 `~/slate/server.log`.
 
 - Every request needs the token: `SLATE_SERVER_TOKEN` in `mine/.env`, generated on first
-  start, as `?t=TOKEN` or an `X-Slate-Token` header. The server is plain HTTP on every
-  interface; the token is what keeps a shared wifi from wiping your slate.
+  start, as `?t=TOKEN` or an `X-Slate-Token` header. The server is plain HTTP; the token is
+  what keeps a shared wifi from wiping your slate.
+- `server.bind` (default `0.0.0.0`): every interface, so the phone can reach it over the LAN.
+  Set `127.0.0.1` to keep it off the wifi entirely and reach it only through the tunnel and/or
+  `tailscale serve --bg --http=7337 http://127.0.0.1:7337` (then put the Mac's MagicDNS name in
+  `server.hosts`). Bonjour advertising is skipped when not bound to the LAN.
+- `POST /timer` `{"minutes": 20, "mode": "soft" | "hard"}` · `POST /timer/cancel`; `/status` includes `timer`.
 - `GET /` the page · `GET /status` · `POST /run` `{"mode": "soft" | "hard" | "snapshot", "noRoam": false}`
   (409 while a run is in progress) · `GET /ping` (no token; for discovery).
-- Advertises itself on the LAN as `_slatewiper._tcp` (Bonjour).
+- Advertises itself on the LAN as `_slatewiper._tcp` (Bonjour) when bound to `0.0.0.0`.
 
 ### Android app
 

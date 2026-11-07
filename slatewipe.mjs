@@ -7,6 +7,8 @@
 //   slatewipe --go --hard  HARD wipe: also kill working agent sessions and busy shells.
 //   slatewipe --snapshot   archive + Roam push only; closes nothing (a save point)
 //   slatewipe find <text>  search every archive for a tab/session/folder
+//   slatewipe in <min>     TIMER: soft wipe (--hard: hard) in <min> minutes, via SlateWiper.app
+//   slatewipe timer [cancel]  what's armed / disarm it
 //   slatewipe --json       dump collected state
 //   --no-roam              skip the Roam push
 //   --grant-screen         ask for Screen Recording (for window screenshots); run via the app
@@ -36,6 +38,15 @@ const ARCHIVE_ROOT = path.join(HOME, 'slate');
 const args = new Set(process.argv.slice(2));
 const GO = args.has('--go'), HARD = args.has('--hard'), SNAPSHOT = args.has('--snapshot'), NOTIFY = args.has('--notify');
 
+// ---- timer: `slatewipe in <minutes> [--hard]`, `slatewipe timer [cancel]` (see timer.mjs) ----
+if (process.argv[2] === 'in' || process.argv[2] === 'timer') {
+  const { spawnSync } = await import('node:child_process');
+  const [cmd, a] = process.argv.slice(2);
+  const targs = cmd === 'in' ? ['arm', a, HARD ? 'hard' : 'soft'] : a === 'cancel' ? ['cancel'] : ['status'];
+  if (cmd === 'in' && !a) { console.error('usage: slatewipe in <minutes> [--hard]   (e.g. 5, 20, 60, 300)'); process.exit(2); }
+  process.exit(spawnSync(process.execPath, [new URL('./timer.mjs', import.meta.url).pathname, ...targs], { stdio: 'inherit' }).status ?? 1);
+}
+
 // ---- config (mine/slatewipe.config.json, else slatewipe.config.example.json; see config.mjs) ----
 const expand = (p) => p.replace(/^~/, HOME);
 const under = (cwd, dirs) => !!cwd && dirs.some(d => cwd === expand(d) || cwd.startsWith(expand(d) + '/'));
@@ -57,6 +68,21 @@ const readJSON = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
 const stamp = (d) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`; };
 const short = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const sleep = (ms) => execSync(`sleep ${ms / 1000}`);
+// The Chrome holding your real profile. Other Chrome instances can be running
+// side by side (a tool's own --user-data-dir, e.g. an audio/automation window),
+// and Application('Google Chrome') may resolve to one of those — it then sees
+// none of your tabs. So pick the instance with the default data dir, by pid.
+const CHROME_BIN = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME_PID = (() => {
+  const defDir = path.join(HOME, 'Library/Application Support/Google/Chrome');
+  for (const line of sh(`ps -axo pid=,args=`).split('\n')) {
+    const m = line.trim().match(/^(\d+) (.*)$/); if (!m || (m[2] !== CHROME_BIN && !m[2].startsWith(CHROME_BIN + ' '))) continue;
+    const dir = m[2].match(/--user-data-dir=(\S+)/)?.[1];
+    if (!dir || path.resolve(expand(dir)) === defDir) return +m[1];
+  }
+  return null;
+})();
+const CHROME_APP = CHROME_PID ? `Application(${CHROME_PID})` : `Application('Google Chrome')`;
 const myTty = (() => { let pid = process.pid; for (let i = 0; i < 12 && pid > 1; i++) { const [tty, ppid] = sh(`ps -o tty=,ppid= -p ${pid}`).split(/\s+/); if (tty && tty !== '??') return tty; pid = +ppid; } return ''; })();
 
 // ---------- find ----------
@@ -219,14 +245,17 @@ function runSweeps(dir) {
 // Web Audio, and mic use with no element attached.
 const PROBE = `(()=>{try{const de=document.documentElement,sh=Math.max(de.scrollHeight,document.body?.scrollHeight||0);let live=null;for(const m of document.querySelectorAll('video,audio')){const so=m.srcObject;if(so&&typeof so.getTracks==='function'&&so.getTracks().some(t=>t.readyState==='live')){live='call in progress (camera/mic)';break}if(!m.paused&&!m.ended&&!m.muted&&m.volume>0&&m.readyState>2)live='media playing'}return JSON.stringify({y:Math.round(scrollY),sh,ih:innerHeight,live})}catch(e){return JSON.stringify({err:String(e)})}})()`;
 function collectChrome() {
-  const r = jxa(`const C = Application('Google Chrome');
+  const r = jxa(`const C = ${CHROME_APP};
     if (!C.running()) JSON.stringify({ running: false, windows: [] }); else {
-    let jsEnabled = true;
+    let jsEnabled = true; const deadline = Date.now() + 40e3;
+    // Frozen / memory-saver-discarded tabs never answer execute, so each probe gets
+    // its own short timeout, and probing stops at a shared deadline. A frozen tab
+    // isn't playing anything, so an unanswered probe just means "not live".
     const windows = C.windows().map(w => ({ id: w.id(), bounds: w.bounds(), tabs: w.tabs().map(t => {
       const tab = { id: t.id(), title: t.title(), url: t.url() };
-      if (jsEnabled && /^https?:/.test(tab.url)) {
-        try { tab.probe = JSON.parse(C.execute(t, { javascript: ${JSON.stringify(PROBE)} })); }
-        catch (e) { if (/turned off/.test(String(e))) jsEnabled = false; else tab.probe = { err: String(e) }; }
+      if (jsEnabled && /^https?:/.test(tab.url) && Date.now() < deadline) {
+        try { tab.probe = JSON.parse(C.execute(t, { javascript: ${JSON.stringify(PROBE)} }, { timeout: 3 })); }
+        catch (e) { if (/turned off/.test(String(e))) jsEnabled = false; else tab.probe = { err: /timed out/.test(String(e)) ? 'no answer (frozen/discarded tab)' : String(e) }; }
       }
       return tab; }) }));
     JSON.stringify({ running: true, jsEnabled, windows }); }`);
@@ -395,7 +424,7 @@ function takeScreenshots(state, dir) {
     if (sh(`screencapture -x -o -l ${w.id} ${q(path.join(dir, f))} 2>&1 && echo ok`) === 'ok') { w.shot = f; n++; }
   });
   const cg = jxa(`ObjC.import('CoreGraphics'); const ref = $.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, $.kCGNullWindowID); const out = [];
-    for (let i = 0; i < ref.count; i++) { const d = ObjC.deepUnwrap(ref.objectAtIndex(i)); if (d.kCGWindowOwnerName === 'Google Chrome' && d.kCGWindowLayer === 0) out.push({ id: d.kCGWindowNumber, b: d.kCGWindowBounds }); }
+    for (let i = 0; i < ref.count; i++) { const d = ObjC.deepUnwrap(ref.objectAtIndex(i)); if (d.kCGWindowOwnerName === 'Google Chrome' && (!${CHROME_PID || 0} || d.kCGWindowOwnerPID === ${CHROME_PID || 0}) && d.kCGWindowLayer === 0) out.push({ id: d.kCGWindowNumber, b: d.kCGWindowBounds }); }
     JSON.stringify(out)`, 20_000);
   if (!cg.__error) state.chrome.windows.forEach((w, i) => {
     const b = w.bounds; if (!b) return;
@@ -425,13 +454,13 @@ function closeChromeTabs(state) {
   // Live tabs (call / media playing) are never handed to Chrome on a soft wipe.
   const ids = state.chrome.windows.flatMap(w => w.tabs.filter(t => !t.keepWhy).map(t => t.id));
   if (!ids.length) return { closed: 0, survivedTabs: [] };
-  const r = jxa(`const C = Application('Google Chrome'); C.includeStandardAdditions = true;
+  const r = jxa(`const C = ${CHROME_APP}; C.includeStandardAdditions = true;
     const ids = ${JSON.stringify(ids)}; const byId = {};
     for (const w of C.windows()) for (const t of w.tabs()) byId[t.id()] = t;
     const hard = ${HARD};
     for (const id of ids) { const t = byId[id]; if (!t) continue;
-      if (hard && /^https?:/.test(t.url())) { try { C.execute(t, { javascript: ${JSON.stringify(DISARM)} }); } catch (e) {} }
-      try { t.close(); } catch (e) {} }
+      if (hard && /^https?:/.test(t.url())) { try { C.execute(t, { javascript: ${JSON.stringify(DISARM)} }, { timeout: 3 }); } catch (e) {} }
+      try { t.close({ timeout: 10 }); } catch (e) {} }
     delay(1.5);
     const alive = new Set(); for (const w of C.windows()) for (const t of w.tabs()) alive.add(t.id());
     JSON.stringify({ survivedTabs: ids.filter(id => alive.has(id)), closed: ids.filter(id => !alive.has(id)).length });`, 180_000);
@@ -556,6 +585,6 @@ if (SNAPSHOT) {
   const untouched = keptTerms.length + liveTabs.length + survivors.length + appRes.refused.length;
   notify('Slate wiped', `closed ${tabRes.closed} tabs, ${termRes.closedWindows} terminals, ${appRes.quit.length} apps${untouched ? ` · ${untouched} untouched` : ''}. Begin again.`);
   printRepoAwareness();
-  for (const u of AFTER_URLS) sh(`open -a 'Google Chrome' ${q(u)}`);
+  for (const u of AFTER_URLS) sh(CHROME_PID ? `${q(CHROME_BIN)} ${q(u)} >/dev/null 2>&1 &` : `open -a 'Google Chrome' ${q(u)}`);   // the binary hands the URL to the running default-profile instance
   console.log('\nBegin again.');
 }

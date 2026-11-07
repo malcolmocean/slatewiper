@@ -18,8 +18,9 @@
     "workDirs": []
   },
   "server": {
-    "_comment": "server.mjs (the phone button). The phone tries, in order: tunnel (https, Cloudflare Tunnel + Access service token), hosts (plain names, e.g. Tailscale MagicDNS or LAN hostname), Bonjour discovery on the LAN, the LAN IP baked in at build time.",
+    "_comment": "server.mjs (the phone button). The phone tries, in order: tunnel (https, Cloudflare Tunnel + Access service token), hosts (plain names, e.g. Tailscale MagicDNS or LAN hostname), Bonjour discovery on the LAN, the LAN IP baked in at build time. bind: 0.0.0.0 = reachable on the LAN (+ Bonjour); 127.0.0.1 = loopback only, reach it through the tunnel and/or `tailscale serve`.",
     "port": 7337,
+    "bind": "0.0.0.0",
     "hosts": [],
     "tunnel": ""
   },
