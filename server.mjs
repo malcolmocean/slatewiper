@@ -68,7 +68,7 @@ const externalRun = () => { try { return !!execFileSync('pgrep', ['-f', 'slatewi
 function start(mode, noRoam) {
   if (run.running || externalRun()) return false;
   Object.assign(run, { running: true, mode, startedAt: Date.now(), finishedAt: null, offset: logSize(), exit: null });
-  const child = spawn('open', ['-W', '-a', 'SlateWiper', '--args', ...MODES[mode], ...(noRoam ? ['--no-roam'] : [])], { stdio: 'ignore' });
+  const child = spawn('open', ['-W', '-n', '-a', 'SlateWiper', '--args', ...MODES[mode], ...(noRoam ? ['--no-roam'] : [])], { stdio: 'ignore' });
   child.on('exit', (code) => Object.assign(run, { running: false, finishedAt: Date.now(), exit: code }));
   child.on('error', (e) => { fs.appendFileSync(LOG, `server: failed to launch SlateWiper: ${e.message}\n`); Object.assign(run, { running: false, finishedAt: Date.now(), exit: -1 }); });
   return true;

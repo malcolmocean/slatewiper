@@ -14,7 +14,7 @@ ask() { osascript -e 'tell application "System Events" to activate' "$@" 2>/dev/
 chooser() {
   local src="$REPO/app/chooser.swift" bin="$REPO/app/chooser"
   if [ ! -x "$bin" ] || [ "$src" -nt "$bin" ]; then
-    swiftc -O -o "$bin" "$src" >> "$LOG" 2>&1 || { rm -f "$bin"; return 1; }
+    swiftc -O -o "$bin" "$src" >> "$LOG" 2>&1 || { rm -f "$bin"; return 2; }
   fi
   "$bin" "$($TIMER status --json)"
 }
@@ -40,7 +40,7 @@ osa_chooser() {
 }
 if [ ${#ARGS[@]} -eq 0 ]; then
   # Launched from Spotlight/Finder with no arguments: ask. (KM / CLI pass args and skip this.)
-  choice=$(chooser) || choice=$(osa_chooser)
+  choice=$(chooser); [ $? -eq 2 ] && choice=$(osa_chooser)   # 2 = couldn't compile; any other exit (closed, killed) means no
   read -r verb a b <<< "$choice"
   case "$verb" in
     go) ARGS=(--go); [ "$a" = hard ] && ARGS+=(--hard) ;;

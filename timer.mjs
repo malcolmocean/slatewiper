@@ -87,9 +87,18 @@ async function wait(id) {
   const late = Date.now() - t.fireAt;
   log(`firing ${LABEL[t.mode]}${late > 60e3 ? ` (${Math.round(late / 60e3)} min late; the Mac was probably asleep)` : ''}`);
   if (process.env.SLATE_TIMER_DRY) return log(`(dry run: would open -a SlateWiper --args ${MODE_ARGS[t.mode].join(' ')})`);
-  const c = spawn('open', ['-a', 'SlateWiper', '--args', ...MODE_ARGS[t.mode], '--timer-fired'], { stdio: 'ignore', detached: true });
+  // -n: if SlateWiper is already open (the chooser window, another wipe), plain `open -a` just activates
+  // that instance and silently drops --args, so the timer would fire into nothing.
+  const appLog = path.join(os.homedir(), 'slate', 'app.log');
+  const size = () => { try { return fs.statSync(appLog).size; } catch { return 0; } };
+  const before = size();
+  const c = spawn('open', ['-n', '-a', 'SlateWiper', '--args', ...MODE_ARGS[t.mode], '--timer-fired'], { stdio: 'ignore', detached: true });
   c.on('error', (e) => log(`failed to launch SlateWiper: ${e.message}`));
   c.unref();
+  // app-main.sh writes "=== <date> slatewipe ..." to app.log first thing; if that never shows up, say so loudly.
+  for (let i = 0; i < 30; i++) { await sleep(1000); if (size() > before) return log('wipe started'); }
+  log('wipe did NOT start (no app.log entry 30 s after launching SlateWiper)');
+  notify('SlateWiper', `The timer fired but the ${LABEL[t.mode]} didn't start. Run it by hand; see ~/slate/timer.log.`);
 }
 
 // ---------- CLI ----------

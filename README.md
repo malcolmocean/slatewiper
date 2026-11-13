@@ -147,12 +147,15 @@ source changes; without a Swift toolchain it falls back to plain AppleScript lis
 it runs them directly and never previews.
 
 ```
-open -a SlateWiper --args --go            # soft wipe
-open -a SlateWiper --args --go --hard     # hard wipe
-open -a SlateWiper --args --snapshot      # save point
-open -a SlateWiper --args --in 20 [--hard|--snapshot]   # arm the timer
-open -a SlateWiper --args --cancel-timer
+open -n -a SlateWiper --args --go            # soft wipe
+open -n -a SlateWiper --args --go --hard     # hard wipe
+open -n -a SlateWiper --args --snapshot      # save point
+open -n -a SlateWiper --args --in 20 [--hard|--snapshot]   # arm the timer
+open -n -a SlateWiper --args --cancel-timer
 ```
+
+Use `-n`: if SlateWiper is already open (say, the chooser window is up), plain `open -a`
+only brings that instance forward and silently drops the arguments.
 
 Output goes to `~/slate/app.log` plus a macOS notification. First run prompts for
 Automation (Terminal, Chrome, System Events). For window screenshots, run
