@@ -4,6 +4,7 @@ mine/
 # build products
 app/SlateWiper.app/
 app/chooser
+app/wipe-anim
 watcher/slate-watcher
 android/build/
 .DS_Store

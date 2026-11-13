@@ -41,6 +41,7 @@ slatewipe in <min>        TIMER. Soft wipe in <min> minutes (--hard for a hard o
 slatewipe timer [cancel]  What's armed / disarm it.
 slate ...                 zsh function for the above; `unwipe` resumes a dropped session in the current repo.
   --no-roam               Skip the Roam push (if you use Roam).
+  --no-anim               Skip the full-screen wipe animation.
 ```
 
 ## Timer
@@ -54,6 +55,19 @@ Custom; while one is armed it shows a countdown with *Cancel timer*), or the CLI
 wall clock, so it survives closing the terminal or restarting the server, and a Mac that slept
 through the deadline wipes on wake. Notifications at 5 min and 1 min out. The wipe itself runs
 through SlateWiper.app like any other. A reboot disarms it. Log: `~/slate/timer.log`.
+
+## The wipe animation
+
+A real wipe (`--go`, soft or hard) covers every screen with a chalkboard, wiped on in back-and-forth
+eraser strokes: green for soft, red for hard. Then **Begin again.** comes up in chalk and stays until
+the wipe has finished, and the board fades away to the cleared desktop. One wipe in ten, the hand from
+the logo does the wiping. A snapshot plays nothing.
+
+It starts after the window screenshots, so it never appears in them, and it only draws: click or press
+a key to dismiss it. `app/wipe-anim.swift` is compiled to `app/wipe-anim` on first use and whenever it
+changes (needs the Swift toolchain; without it the wipe just runs without the animation). Turn it off
+with `"animation": { "enabled": false }` in the config, or force the hand with `"hand": "always"` / `"never"`.
+Preview without wiping: `app/wipe-anim soft --hand </dev/null` (`--snapshot dir/` renders frames instead).
 
 ## What "safe to close" means (soft mode)
 
@@ -108,8 +122,11 @@ Anything specific to you belongs in `mine/`, not in the code.
 All lists are nuke-lists, never keep-lists.
 
 - `id`: reverse-DNS id for the app bundle, LaunchAgent labels and the Android app.
-- `quitApps.list`: GUI apps quit on `--go`. Graceful; an app that refuses within
-  `graceSeconds` (unsaved documents) is reported as untouched. `--hard` force-kills it.
+- `quitApps.list`: GUI apps quit on `--go`. Graceful. A soft wipe leaves running any
+  scriptable app (CotEditor, Preview, TextEdit…) that has unsaved documents, and any app
+  that refuses to quit within `graceSeconds`; both are reported as untouched. `--hard`
+  quits/force-kills them. Open documents are listed in the archive, and the text of
+  unsaved ones is copied into it, either way.
   When Cursor quits, the folders it had open are recorded with `open -a Cursor <folder>`
   resume lines.
 - `finder.close`: record Finder window paths and close them.

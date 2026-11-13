@@ -11,6 +11,7 @@
 //   slatewipe timer [cancel]  what's armed / disarm it
 //   slatewipe --json       dump collected state
 //   --no-roam              skip the Roam push
+//   --no-anim              skip the full-screen wipe animation (app/wipe-anim.swift)
 //   --grant-screen         ask for Screen Recording (for window screenshots); run via the app
 //
 // "Safe to close" means:
@@ -26,12 +27,12 @@
 //     soft wipe too; a hard wipe closes them.
 // Git working trees are never touched by either mode.
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { assignProfiles } from './chrome-profiles.mjs';
-import { CONFIG, loadEnv } from './config.mjs';
+import { CONFIG, HERE, loadEnv } from './config.mjs';
 
 const HOME = os.homedir();
 const ARCHIVE_ROOT = path.join(HOME, 'slate');
@@ -55,6 +56,7 @@ const PERSONAL_PROFILES = CONFIG.chrome?.personalProfiles || [];
 const WORK_URL_PATTERNS = (CONFIG.chrome?.workUrlPatterns || []).map(p => new RegExp(p, 'i'));
 const ROAM = CONFIG.roam || {};
 const QUIT_APPS = CONFIG.quitApps?.list || [], QUIT_GRACE = (CONFIG.quitApps?.graceSeconds ?? 8) * 1000;
+const ANIMATE = CONFIG.animation?.enabled !== false && !args.has('--no-anim');
 const SWEEP = CONFIG.sweep || {}, AFTER_URLS = CONFIG.afterwards?.openUrls || [], FINDER_CLOSE = CONFIG.finder?.close !== false;
 
 // ---------- helpers ----------
@@ -190,7 +192,27 @@ function collectApps() {
   if (r.__error) return { error: r.__error, running: [], toQuit: [] };
   const running = [...new Set(r)].filter(n => n !== 'Finder');
   const toQuit = [...new Set([...QUIT_APPS, CHROME_TESTING])].filter(a => running.some(n => n.toLowerCase() === a.toLowerCase()));
-  return { running, toQuit };
+  return { running, toQuit, docs: collectDocs(toQuit) };
+}
+// Open documents of the apps we'll quit (scriptable ones: CotEditor, Preview, TextEdit…; Electron
+// apps just throw). A soft wipe leaves an app with unsaved documents running; the text of each
+// unsaved document is copied into the archive either way, so a hard wipe loses nothing.
+function collectDocs(names) {
+  const apps = names.filter(n => n !== CHROME_TESTING); if (!apps.length) return {};
+  const r = jxa(`const out = {};
+    for (const n of ${JSON.stringify(apps)}) { try {
+      const docs = Application(n).documents().map(d => { const o = {};
+        try { o.name = d.name(); } catch (e) {}
+        try { o.modified = d.modified(); } catch (e) {}
+        try { const f = d.file(); if (f) o.path = f.toString(); } catch (e) {}
+        try { if (!o.path && d.path()) o.path = String(d.path()); } catch (e) {}
+        if (o.modified || !o.path) { try { o.text = String(d.contents()); } catch (e) { try { o.text = String(d.text()); } catch (e) {} } }
+        if (!o.path && o.text) o.modified = true;   // untitled with content: unsaved, whatever the app's flag says
+        if (o.modified && o.text != null) o.text = o.text.slice(0, 5e6); else delete o.text;
+        return o; });
+      if (docs.length) out[n] = docs; } catch (e) {} }
+    JSON.stringify(out)`, 30_000);
+  return r.__error ? {} : r;
 }
 
 // ---------- cursor ----------
@@ -300,7 +322,11 @@ function render(state, result) {
   }
   if (state.finder?.paths?.length) L.push(`  - **Finder:** ${state.finder.paths.map(p => `\`${p}\``).join(', ')}`);
   if (result?.sweeps?.length) for (const sw of result.sweeps) L.push(`  - **${sw.name} sweep:** ${sw.skipped ? sw.skipped : sw.moved.length ? `${sw.moved.length} moved → ${state.ts}/${sw.name.toLowerCase()}/ (${sw.moved.slice(0, 8).join(', ')}${sw.moved.length > 8 ? ', …' : ''})` : 'nothing to move'}`);
-  if (state.apps?.running?.length) L.push(`  - **Apps open:** ${state.apps.running.join(', ')}${state.apps.toQuit.length ? ` · quitting: ${state.apps.toQuit.join(', ')}` : ''}${result?.appsRefused?.length ? ` · **refused to quit: ${result.appsRefused.join(', ')}**` : ''}`);
+  if (state.apps?.running?.length) L.push(`  - **Apps open:** ${state.apps.running.join(', ')}${state.apps.toQuit.length ? ` · quitting: ${state.apps.toQuit.join(', ')}` : ''}${result?.appsRefused?.length ? ` · **refused to quit: ${result.appsRefused.join(', ')}**` : ''}${result?.appsUnsaved?.length ? ` · **left running (unsaved documents): ${result.appsUnsaved.join(', ')}**` : ''}`);
+  for (const [app, docs] of Object.entries(state.apps?.docs || {})) {
+    L.push(`  - **${app} documents**`);
+    for (const d of docs) L.push(`    - ${d.path ? `\`${d.path}\`` : d.name || 'untitled'}${d.modified ? ' · **unsaved**' : ''}${d.saved ? ` · [unsaved text](${d.saved})` : ''}`);
+  }
   L.push(`  - **Chrome**${chrome.jsEnabled === false ? ' *(JS-from-AppleScript off: no read%)*' : ''}`);
   chrome.windows.forEach((w, i) => {
     L.push(`    - ${w.pwa ? `${w.pwa} PWA` : 'window'} ${i + 1} (${w.tabs.length} tabs${w.profile ? `, ${w.profile}` : ''})${w.shot ? ` · [screenshot](${w.shot})` : ''}`);
@@ -318,6 +344,11 @@ function render(state, result) {
 // nothing) writes none, and a wipe skips terminals it kept: they're still open.
 function writeArchive(state, md) {
   const dir = path.join(ARCHIVE_ROOT, state.ts); fs.mkdirSync(dir, { recursive: true });
+  for (const [app, docs] of Object.entries(state.apps?.docs || {})) docs.forEach((d, i) => {
+    if (d.text == null) return;
+    d.saved = `unsaved-${app}-${i + 1}-${d.name || 'untitled'}`.replace(/[^\w.-]+/g, '_').slice(0, 120) + (/\.\w+$/.test(d.name || '') ? '' : '.txt');
+    fs.writeFileSync(path.join(dir, d.saved), d.text); delete d.text;
+  });
   fs.writeFileSync(path.join(dir, 'slate.md'), md); fs.writeFileSync(path.join(dir, 'slate.json'), JSON.stringify(state, null, 2));
   if (state.mode === 'snapshot') return dir;
   const byRepo = {};
@@ -435,6 +466,18 @@ function takeScreenshots(state, dir) {
   });
   return { count: n };
 }
+// The full-screen chalkboard wipe (app/wipe-anim.swift), started first thing on --go. It holds "Begin again." until we close its stdin, which also happens if we die.
+function startAnimation(mode) {
+  if (!ANIMATE) return { end() {} };
+  try {
+    const src = path.join(HERE, 'app/wipe-anim.swift'), bin = path.join(HERE, 'app/wipe-anim');
+    if (!fs.existsSync(bin) || fs.statSync(src).mtimeMs > fs.statSync(bin).mtimeMs) execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore', timeout: 120_000 });
+    const extra = CONFIG.animation?.hand === 'always' ? ['--hand'] : CONFIG.animation?.hand === 'never' ? ['--no-hand'] : [];
+    const child = spawn(bin, [mode, ...extra], { stdio: ['pipe', 'ignore', 'ignore'], detached: true });
+    child.on('error', () => {}); child.stdin.on('error', () => {}); child.unref();
+    return { end() { try { child.stdin.end('done\n'); } catch {} } };
+  } catch (e) { console.log(`animation: skipped (${e.message.split('\n')[0]})`); return { end() {} }; }
+}
 function notify(title, body) {
   if (!NOTIFY) return;
   jxa(`const a = Application.currentApplication(); a.includeStandardAdditions = true; a.displayNotification(${JSON.stringify(body)}, { withTitle: ${JSON.stringify(title)} }); JSON.stringify(1)`, 10_000);
@@ -468,7 +511,8 @@ function closeChromeTabs(state) {
 }
 
 function quitApps(state) {
-  const names = state.apps.toQuit; if (!names.length) return { quit: [], refused: [] };
+  const unsaved = HARD ? [] : state.apps.toQuit.filter(n => (state.apps.docs?.[n] || []).some(d => d.modified));
+  const names = state.apps.toQuit.filter(n => !unsaved.includes(n)); if (!names.length) return { quit: [], refused: [], unsaved };
   for (const n of names) {
     if (n === CHROME_TESTING) { sh(`pkill -TERM -x ${q(n)}`); continue; }
     jxa(`try { Application(${JSON.stringify(n)}).quit(); } catch (e) {} JSON.stringify(1)`, 15_000);
@@ -482,7 +526,7 @@ function quitApps(state) {
   }
   if (still.length && HARD) { for (const n of still) sh(`pkill -9 -x ${q(n)}`); sleep(500); still = []; }
   if (names.includes('Cursor') && !still.includes('Cursor')) { sleep(1000); state.cursor.folders = cursorFoldersFromStorage(); state.cursor.running = false; }
-  return { quit: names.filter(n => !still.includes(n)), refused: still };
+  return { quit: names.filter(n => !still.includes(n)), refused: still, unsaved };
 }
 
 function closeTerminals(state) {
@@ -517,6 +561,9 @@ if (args.has('--grant-screen')) { // run via the app so the grant lands on Slate
   console.log(ok ? 'Screen Recording: granted' : 'Screen Recording: not granted yet. Turn SlateWiper on in System Settings → Privacy & Security → Screen & System Audio Recording.');
   process.exit(0);
 }
+// Start the wipe animation before collecting state (that takes a few seconds). Screenshots are
+// per-window (screencapture -l), so the overlay doesn't end up in them.
+const anim = GO && !SNAPSHOT && !args.has('--json') ? startAnimation(HARD ? 'hard' : 'soft') : { end() {} };
 const now = new Date();
 const state = { ts: stamp(now), human: now.toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }), time: now.toLocaleTimeString('en-CA', { timeStyle: 'short' }), host: os.hostname(), mode: SNAPSHOT ? 'snapshot' : GO ? (HARD ? 'hard' : 'soft') : 'preview', terminals: collectTerminals(), chrome: collectChrome(), apps: collectApps() };
 state.cursor = collectCursor(state.apps); state.finder = collectFinder();
@@ -545,6 +592,8 @@ if (SNAPSHOT) {
   console.log(`  • close ${closableTerms.length} terminals: ${closableTerms.filter(t => t.session).length} idle agent sessions + ${closableTerms.filter(t => !t.session).length} idle shells`);
   console.log(`  • try to close ${allTabs.length - liveTabs.length} Chrome tabs; Chrome keeps any with real unsaved state (you'll see its Leave/Cancel dialog on those)`);
   console.log(`  • quit ${state.apps.toQuit.length} apps: ${state.apps.toQuit.join(', ') || '(none of the nuke-list is running)'}${state.cursor.running ? ' (Cursor folders recorded on quit)' : ''}`);
+  const unsavedApps = Object.entries(state.apps.docs || {}).filter(([, ds]) => ds.some(d => d.modified)).map(([n]) => n);
+  if (unsavedApps.length) console.log(`    except ${unsavedApps.join(', ')}: unsaved documents (text gets archived; --hard quits them too)`);
   if (FINDER_CLOSE && state.finder.paths.length) console.log(`  • close ${state.finder.paths.length} Finder windows`);
   const sweeps = [SWEEP.desktop?.enabled && 'Desktop', SWEEP.downloads?.enabled && `Downloads (>${SWEEP.downloads.olderThanDays ?? 1}d old)`].filter(Boolean);
   if (sweeps.length) console.log(`  • sweep ${sweeps.join(' and ')} into the archive`);
@@ -567,23 +616,25 @@ if (SNAPSHOT) {
   const termRes = closeTerminals(state);
   console.log(`terminals: killed ${termRes.killed} agent sessions, closed ${termRes.closedWindows} windows`);
   const appRes = quitApps(state);
-  console.log(`apps: quit ${appRes.quit.join(', ') || 'none'}${appRes.refused.length ? `; refused: ${appRes.refused.join(', ')}` : ''}`);
+  console.log(`apps: quit ${appRes.quit.join(', ') || 'none'}${appRes.refused.length ? `; refused: ${appRes.refused.join(', ')}` : ''}${appRes.unsaved.length ? `; left running (unsaved documents): ${appRes.unsaved.join(', ')}` : ''}`);
   if (FINDER_CLOSE && state.finder.paths.length) { const n = closeFinder(); console.log(`finder: closed ${n.__error ? '?' : n} windows`); }
   const sweeps = runSweeps(dir); for (const sw of sweeps) console.log(`${sw.name.toLowerCase()} sweep: ${sw.skipped || `${sw.moved.length} moved`}`);
-  const result = { survivedTabs: tabRes.survivedTabs, appsRefused: appRes.refused, sweeps };
+  const result = { survivedTabs: tabRes.survivedTabs, appsRefused: appRes.refused, appsUnsaved: appRes.unsaved, sweeps };
   const finalMd = render(state, result); writeArchive(state, finalMd); // again: now with Cursor folders + sweep results
   if (!args.has('--no-roam')) await pushRoam(state, result, (m) => console.log(m));
   const survivors = allTabs.filter(t => tabRes.survivedTabs.includes(t.id));
-  if (keptTerms.length || liveTabs.length || survivors.length || appRes.refused.length) {
+  if (keptTerms.length || liveTabs.length || survivors.length || appRes.refused.length || appRes.unsaved.length) {
     console.log(`\nUNTOUCHED:`);
     for (const a of appRes.refused) console.log(`  - app ${a} — refused to quit (unsaved documents?)`);
+    for (const a of appRes.unsaved) console.log(`  - app ${a} — has unsaved documents (their text is in the archive; --hard quits it anyway)`);
     for (const t of keptTerms) console.log(`  - ${describe(t)} — ${t.keepWhy}`);
     for (const t of liveTabs) console.log(`  - tab "${short(t.title || t.url, 70)}" — ${t.keepWhy}`);
     for (const t of survivors) console.log(`  - tab "${short(t.title || t.url, 70)}" — Chrome says unsaved state; its Leave/Cancel dialog is up (answer it before the next wipe)`);
     if (keptTerms.length || liveTabs.length || survivors.length) console.log(`  (\`slatewipe --go --hard\` kills the terminals too, closes live tabs, and disarms the tabs' unsaved-state check)`);
   }
-  const untouched = keptTerms.length + liveTabs.length + survivors.length + appRes.refused.length;
+  const untouched = keptTerms.length + liveTabs.length + survivors.length + appRes.refused.length + appRes.unsaved.length;
   notify('Slate wiped', `closed ${tabRes.closed} tabs, ${termRes.closedWindows} terminals, ${appRes.quit.length} apps${untouched ? ` · ${untouched} untouched` : ''}. Begin again.`);
+  anim.end();
   printRepoAwareness();
   for (const u of AFTER_URLS) sh(CHROME_PID ? `${q(CHROME_BIN)} ${q(u)} >/dev/null 2>&1 &` : `open -a 'Google Chrome' ${q(u)}`);   // the binary hands the URL to the running default-profile instance
   console.log('\nBegin again.');

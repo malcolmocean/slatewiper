@@ -3,7 +3,7 @@
   "id": "local.slatewiper",
   "_id_comment": "Reverse-DNS id for the app bundle, LaunchAgent labels and the Android app. Changing it after granting permissions means re-granting them.",
   "quitApps": {
-    "_comment": "GUI apps to quit on --go (graceful quit; an app that refuses, e.g. unsaved docs, is reported as untouched). --hard force-kills anything still running after the grace period. Cursor's open folders are read from its storage.json after it quits and recorded with an `open -a Cursor` resume line.",
+    "_comment": "GUI apps to quit on --go (graceful quit; a soft wipe leaves running any scriptable app with unsaved documents (CotEditor, Preview, TextEdit\u2026) and one that refuses to quit, and reports them as untouched; the text of unsaved documents is copied into the archive). --hard force-kills anything still running after the grace period. Cursor's open folders are read from its storage.json after it quits and recorded with an `open -a Cursor` resume line.",
     "list": [],
     "graceSeconds": 8
   },
@@ -42,6 +42,11 @@
       "enabled": false,
       "olderThanDays": 1
     }
+  },
+  "animation": {
+    "_comment": "Full-screen chalkboard wipe on --go: green for soft, red for hard, then \"Begin again.\" until the wipe finishes. Click or press a key to dismiss it. hand: \"sometimes\" (one wipe in ten, the hand from the logo does the wiping), \"always\" or \"never\". --no-anim skips it once.",
+    "enabled": true,
+    "hand": "sometimes"
   },
   "afterwards": {
     "_comment": "URLs to open in Chrome after a wipe (a 'begin again' page). Empty = open nothing.",
