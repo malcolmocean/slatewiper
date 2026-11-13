@@ -8,3 +8,7 @@ app/wipe-anim
 watcher/slate-watcher
 android/build/
 .DS_Store
+
+# session reports
+report.html
+report-media/
