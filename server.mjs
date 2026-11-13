@@ -4,7 +4,7 @@
 //   GET  /?t=TOKEN        the page: Soft wipe / Hard wipe / Snapshot, plus the live log
 //   POST /run {mode, noRoam}  mode = soft | hard | snapshot; noRoam:true skips the Roam push. 409 if a run is in progress.
 //   GET  /status          { running, mode, startedAt, finishedAt, output, timer }
-//   POST /timer {minutes, mode}  arm "wipe in N minutes" (mode soft | hard; replaces any armed timer). See timer.mjs.
+//   POST /timer {minutes, mode}  arm "wipe in N minutes" (mode soft | hard | snapshot; replaces any armed timer). See timer.mjs.
 //   POST /timer/cancel    disarm
 //   GET  /ping            { slatewiper: true, host } — no token; what the phone probes to find this Mac
 //
@@ -117,7 +117,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 </div>
 <div class="timer" id="timer">
   <div id="arm">
-    <div class="hd">Wipe in… <label><input type="checkbox" id="hard"> hard</label></div>
+    <div class="hd"><span>In… <select id="tmode"><option value="soft">soft wipe</option><option value="hard">hard wipe</option><option value="snapshot">snapshot</option></select></span></div>
     <div class="chips">
       <button data-min="5">5m</button><button data-min="20">20m</button><button data-min="60">1h</button><button data-min="300">5h</button>
       <input id="custom" type="number" inputmode="decimal" min="1" placeholder="min ↵" enterkeyhint="go">
@@ -143,13 +143,13 @@ function renderTimer() {
   if (!armed) { $('#timer').classList.remove('hot'); return; }
   const left = armed.fireAt - (Date.now() + skew);
   $('#left').textContent = fmt(left);
-  $('#when').textContent = armed.mode + ' wipe at ' + new Date(armed.fireAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  $('#when').textContent = (armed.mode === 'snapshot' ? 'snapshot' : armed.mode + ' wipe') + ' at ' + new Date(armed.fireAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   $('#timer').classList.toggle('hot', left < 60e3);
 }
 setInterval(() => { if (armed) { renderTimer(); if (armed.fireAt - (Date.now() + skew) < -2000 && !timer) poll(); } }, 1000);
 async function arm(min) {
   if (!(min > 0)) return;
-  const r = await fetch('/timer', { method: 'POST', headers: H, body: JSON.stringify({ minutes: min, mode: $('#hard').checked ? 'hard' : 'soft' }) });
+  const r = await fetch('/timer', { method: 'POST', headers: H, body: JSON.stringify({ minutes: min, mode: $('#tmode').value }) });
   if (!r.ok) $('#st').textContent = 'error: ' + (await r.text());
   clearTimeout(timer); poll();
 }

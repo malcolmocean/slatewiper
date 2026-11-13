@@ -7,7 +7,7 @@
 //   slatewipe --go --hard  HARD wipe: also kill working agent sessions and busy shells.
 //   slatewipe --snapshot   archive + Roam push only; closes nothing (a save point)
 //   slatewipe find <text>  search every archive for a tab/session/folder
-//   slatewipe in <min>     TIMER: soft wipe (--hard: hard) in <min> minutes, via SlateWiper.app
+//   slatewipe in <min>     TIMER: soft wipe (--hard: hard, --snapshot: snapshot) in <min> minutes, via SlateWiper.app
 //   slatewipe timer [cancel]  what's armed / disarm it
 //   slatewipe --json       dump collected state
 //   --no-roam              skip the Roam push
@@ -38,12 +38,12 @@ const ARCHIVE_ROOT = path.join(HOME, 'slate');
 const args = new Set(process.argv.slice(2));
 const GO = args.has('--go'), HARD = args.has('--hard'), SNAPSHOT = args.has('--snapshot'), NOTIFY = args.has('--notify');
 
-// ---- timer: `slatewipe in <minutes> [--hard]`, `slatewipe timer [cancel]` (see timer.mjs) ----
+// ---- timer: `slatewipe in <minutes> [--hard | --snapshot]`, `slatewipe timer [cancel]` (see timer.mjs) ----
 if (process.argv[2] === 'in' || process.argv[2] === 'timer') {
   const { spawnSync } = await import('node:child_process');
   const [cmd, a] = process.argv.slice(2);
-  const targs = cmd === 'in' ? ['arm', a, HARD ? 'hard' : 'soft'] : a === 'cancel' ? ['cancel'] : ['status'];
-  if (cmd === 'in' && !a) { console.error('usage: slatewipe in <minutes> [--hard]   (e.g. 5, 20, 60, 300)'); process.exit(2); }
+  const targs = cmd === 'in' ? ['arm', a, SNAPSHOT ? 'snapshot' : HARD ? 'hard' : 'soft'] : a === 'cancel' ? ['cancel'] : ['status'];
+  if (cmd === 'in' && !a) { console.error('usage: slatewipe in <minutes> [--hard | --snapshot]   (e.g. 5, 20, 60, 300)'); process.exit(2); }
   process.exit(spawnSync(process.execPath, [new URL('./timer.mjs', import.meta.url).pathname, ...targs], { stdio: 'inherit' }).status ?? 1);
 }
 

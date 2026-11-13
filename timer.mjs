@@ -2,7 +2,7 @@
 // timer.mjs — "wipe everything in N minutes". One timer at a time, shared by every entry point
 // (the phone page via server.mjs, the app's chooser, the CLI).
 //
-//   node timer.mjs arm <minutes> [soft|hard]   arm (replaces any armed timer); prints the fire time
+//   node timer.mjs arm <minutes> [soft|hard|snapshot]   arm (replaces any armed timer); prints the fire time
 //   node timer.mjs cancel                      disarm
 //   node timer.mjs status [--json]             what's armed; --json: { armed, fireAt, mode, minutes, armedAt } or { armed: false }
 //
@@ -22,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 const FILE = path.join(os.homedir(), 'slate', 'timer.json');
 const LOG = path.join(os.homedir(), 'slate', 'timer.log');   // not app.log: the phone page shows app.log's latest run
 const SELF = fileURLToPath(import.meta.url);
-const MODE_ARGS = { soft: ['--go'], hard: ['--go', '--hard'] };
+const MODE_ARGS = { soft: ['--go'], hard: ['--go', '--hard'], snapshot: ['--snapshot'] };
+export const LABEL = { soft: 'soft wipe', hard: 'hard wipe', snapshot: 'snapshot' };
 export const PRESETS = [5, 20, 60, 300];
 
 const read = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return null; } };
@@ -46,14 +47,14 @@ export function cancel() {
   if (!t) return false;
   try { fs.unlinkSync(FILE); } catch {}
   if (alive(t.pid)) try { process.kill(t.pid); } catch {}
-  log(`cancelled (was ${t.mode} at ${clock(t.fireAt)})`);
+  log(`cancelled (was ${LABEL[t.mode]} at ${clock(t.fireAt)})`);
   return true;
 }
 
 export function arm(minutes, mode = 'soft') {
   minutes = Number(minutes);
   if (!(minutes > 0 && minutes <= 7 * 24 * 60)) throw new Error('minutes must be a number between 0 and 10080');
-  if (!MODE_ARGS[mode]) throw new Error('mode must be soft | hard');
+  if (!MODE_ARGS[mode]) throw new Error('mode must be soft | hard | snapshot');
   const prev = read(); if (prev) { try { fs.unlinkSync(FILE); } catch {} if (alive(prev.pid)) try { process.kill(prev.pid); } catch {} }
   const armedAt = Date.now(), fireAt = armedAt + minutes * 60e3, id = `${armedAt}-${process.pid}`;
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
@@ -62,7 +63,7 @@ export function arm(minutes, mode = 'soft') {
   child.unref(); fs.closeSync(out);
   const t = { id, pid: child.pid, armedAt, fireAt, minutes, mode };
   fs.writeFileSync(FILE, JSON.stringify(t, null, 2));
-  log(`armed: ${mode} wipe at ${clock(fireAt)} (in ${human(minutes)})`);
+  log(`armed: ${LABEL[mode]} at ${clock(fireAt)} (in ${human(minutes)})`);
   return { armed: true, fireAt, mode, minutes, armedAt };
 }
 
@@ -77,14 +78,14 @@ async function wait(id) {
     if (left <= 0) break;
     while (warnings.length && left <= warnings[0]) {
       const w = warnings.shift();
-      if (left > w - 30e3) notify('SlateWiper', `${t.mode === 'hard' ? 'Hard' : 'Soft'} wipe in ${w / 60e3} min (${clock(t.fireAt)}). Cancel from the phone, the app, or \`slate timer cancel\`.`);
+      if (left > w - 30e3) notify('SlateWiper', `${LABEL[t.mode][0].toUpperCase() + LABEL[t.mode].slice(1)} in ${w / 60e3} min (${clock(t.fireAt)}). Cancel from the phone, the app, or \`slate timer cancel\`.`);
     }
     await sleep(Math.min(5000, Math.max(250, left)));
   }
   if (!t) return;   // cancelled / replaced
   try { fs.unlinkSync(FILE); } catch {}
   const late = Date.now() - t.fireAt;
-  log(`firing ${t.mode} wipe${late > 60e3 ? ` (${Math.round(late / 60e3)} min late; the Mac was probably asleep)` : ''}`);
+  log(`firing ${LABEL[t.mode]}${late > 60e3 ? ` (${Math.round(late / 60e3)} min late; the Mac was probably asleep)` : ''}`);
   if (process.env.SLATE_TIMER_DRY) return log(`(dry run: would open -a SlateWiper --args ${MODE_ARGS[t.mode].join(' ')})`);
   const c = spawn('open', ['-a', 'SlateWiper', '--args', ...MODE_ARGS[t.mode], '--timer-fired'], { stdio: 'ignore', detached: true });
   c.on('error', (e) => log(`failed to launch SlateWiper: ${e.message}`));
@@ -96,14 +97,14 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === SELF) {
   const [cmd, a, b] = process.argv.slice(2);
   if (cmd === 'wait') await wait(a);
   else if (cmd === 'arm') {
-    try { const s = arm(a, b || 'soft'); console.log(`${s.mode} wipe at ${clock(s.fireAt)} (in ${human(s.minutes)}). \`slate timer cancel\` to disarm.`); }
+    try { const s = arm(a, b || 'soft'); console.log(`${LABEL[s.mode]} at ${clock(s.fireAt)} (in ${human(s.minutes)}). \`slate timer cancel\` to disarm.`); }
     catch (e) { console.error(e.message); process.exit(2); }
   }
   else if (cmd === 'cancel') console.log(cancel() ? 'timer cancelled' : 'no timer armed');
   else if (cmd === 'status' || !cmd) {
     const s = status();
     if (process.argv.includes('--json')) console.log(JSON.stringify(s));
-    else console.log(s.armed ? `${s.mode} wipe at ${clock(s.fireAt)} (${human((s.fireAt - Date.now()) / 60e3)} left)` : 'no timer armed');
+    else console.log(s.armed ? `${LABEL[s.mode]} at ${clock(s.fireAt)} (${human((s.fireAt - Date.now()) / 60e3)} left)` : 'no timer armed');
   }
-  else { console.error('usage: timer.mjs arm <minutes> [soft|hard] | cancel | status'); process.exit(2); }
+  else { console.error('usage: timer.mjs arm <minutes> [soft|hard|snapshot] | cancel | status'); process.exit(2); }
 }

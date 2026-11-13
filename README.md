@@ -37,7 +37,7 @@ slatewipe --go --hard     HARD wipe. Also kills working agent sessions / busy sh
 slatewipe --snapshot      Archive only. Closes nothing. A save point.
 slatewipe find <text>     Search every archive (tab titles, URLs, session titles, folders).
 slatewipe --json          Dump collected state.
-slatewipe in <min>        TIMER. Soft wipe in <min> minutes (--hard for a hard one). Replaces any armed timer.
+slatewipe in <min>        TIMER. Soft wipe in <min> minutes (--hard for a hard one, --snapshot for a snapshot). Replaces any armed timer.
 slatewipe timer [cancel]  What's armed / disarm it.
 slate ...                 zsh function for the above; `unwipe` resumes a dropped session in the current repo.
   --no-roam               Skip the Roam push (if you use Roam).
@@ -46,9 +46,9 @@ slate ...                 zsh function for the above; `unwipe` resumes a dropped
 ## Timer
 
 "Nuke everything in N minutes." One timer at a time, armed from any entry point: the phone page
-(5m / 20m / 1h / 5h chips or a custom number, with a *hard* checkbox; shows a live countdown and
-Cancel once armed), the app's chooser (*Timer — soft wipe in N minutes…*, then the same presets or
-Custom; a *Cancel timer* item appears while one is armed), or the CLI (`slate in 20 [--hard]`).
+(5m / 20m / 1h / 5h chips or a custom number, with a soft / hard / snapshot picker; shows a live countdown and
+Cancel once armed), the app's chooser (pick Soft, Hard or Snapshot, then *When*: Now / 5 min / 20 min / 1 h / 5 h /
+Custom; while one is armed it shows a countdown with *Cancel timer*), or the CLI (`slate in 20 [--hard]`).
 
 `timer.mjs` keeps the state in `~/slate/timer.json` and a detached waiter process watches the
 wall clock, so it survives closing the terminal or restarting the server, and a Mac that slept
@@ -140,15 +140,17 @@ matter here, both learned the hard way:
   `app-main.sh`, and the bundle never needs rebuilding. If it does
   (`./install.sh --rebuild-app`), re-grant the permissions.
 
-Launched with no arguments (Spotlight, Finder, Dock) it shows a small chooser: Soft wipe /
-Hard wipe / Snapshot / Cancel. With arguments (Keyboard Maestro, Raycast, `open --args`)
+Launched with no arguments (Spotlight, Finder, Dock) it shows a chooser window: Soft wipe /
+Hard wipe / Snapshot cards, a *When* row (Now or a timer), and the armed timer if there is one.
+It's SwiftUI (`app/chooser.swift`), compiled to `app/chooser` on first launch and whenever the
+source changes; without a Swift toolchain it falls back to plain AppleScript lists. With arguments (Keyboard Maestro, Raycast, `open --args`)
 it runs them directly and never previews.
 
 ```
 open -a SlateWiper --args --go            # soft wipe
 open -a SlateWiper --args --go --hard     # hard wipe
 open -a SlateWiper --args --snapshot      # save point
-open -a SlateWiper --args --in 20 [--hard]   # arm the timer
+open -a SlateWiper --args --in 20 [--hard|--snapshot]   # arm the timer
 open -a SlateWiper --args --cancel-timer
 ```
 
@@ -172,7 +174,7 @@ and the live log. It launches runs through SlateWiper.app, so permissions are th
   Set `127.0.0.1` to keep it off the wifi entirely and reach it only through the tunnel and/or
   `tailscale serve --bg --http=7337 http://127.0.0.1:7337` (then put the Mac's MagicDNS name in
   `server.hosts`). Bonjour advertising is skipped when not bound to the LAN.
-- `POST /timer` `{"minutes": 20, "mode": "soft" | "hard"}` · `POST /timer/cancel`; `/status` includes `timer`.
+- `POST /timer` `{"minutes": 20, "mode": "soft" | "hard" | "snapshot"}` · `POST /timer/cancel`; `/status` includes `timer`.
 - `GET /` the page · `GET /status` · `POST /run` `{"mode": "soft" | "hard" | "snapshot", "noRoam": false}`
   (409 while a run is in progress) · `GET /ping` (no token; for discovery).
 - Advertises itself on the LAN as `_slatewiper._tcp` (Bonjour) when bound to `0.0.0.0`.

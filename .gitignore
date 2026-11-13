@@ -3,6 +3,7 @@ mine/
 .env
 # build products
 app/SlateWiper.app/
+app/chooser
 watcher/slate-watcher
 android/build/
 .DS_Store
